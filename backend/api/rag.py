@@ -16,6 +16,7 @@ class RAGQueryRequest(BaseModel):
     session_id: str
     question: str | None = Field(default=None)
     query: str | None = Field(default=None)
+    use_llm: bool = False
 
     @model_validator(mode="after")
     def validate_question_text(self) -> "RAGQueryRequest":
@@ -44,9 +45,12 @@ def rag_status(
     session = _load_session(session_id, session_store)
     return {
         "session_id": session.session_id,
-        "ready": bool(session.chunks),
+        "ready": bool(session.chunks and session.selected_textbooks),
         "chunk_count": len(session.chunks),
+        "selected_textbook_count": len(session.selected_textbooks),
+        "searchable_chunk_count": _searchable_chunk_count(session),
         "graph_node_count": len(session.graph_nodes),
+        "retrieval_status": "ready" if session.selected_textbooks else "no_selected_textbooks",
     }
 
 
@@ -57,7 +61,12 @@ def query_rag(
     llm_client: LLMClient | None = Depends(get_llm_client),
 ) -> dict[str, Any]:
     session = _load_session(request.session_id, session_store)
-    return answer_query(session, request.question_text, llm_client=llm_client)
+    return answer_query(
+        session,
+        request.question_text,
+        llm_client=llm_client,
+        use_llm=request.use_llm,
+    )
 
 
 def _load_session(session_id: str | None, session_store: SessionStore) -> KIBotSession:
@@ -70,3 +79,14 @@ def _load_session(session_id: str | None, session_store: SessionStore) -> KIBotS
         raise HTTPException(status_code=400, detail="Invalid session ID") from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found") from exc
+
+
+def _searchable_chunk_count(session: KIBotSession) -> int:
+    selected = {textbook_id for textbook_id in session.selected_textbooks if isinstance(textbook_id, str)}
+    if not selected:
+        return 0
+    return sum(
+        1
+        for chunk in session.chunks
+        if isinstance(chunk, dict) and chunk.get("textbook_id") in selected
+    )

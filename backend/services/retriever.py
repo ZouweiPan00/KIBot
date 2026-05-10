@@ -20,6 +20,10 @@ def retrieve_chunks(
     query: str,
     limit: int = MAX_RETRIEVED_CHUNKS,
 ) -> list[dict[str, Any]]:
+    selected_textbook_ids = _selected_textbook_ids(session.selected_textbooks)
+    if not selected_textbook_ids:
+        return []
+
     query_terms = _terms(query)
     query_text = query.casefold()
     concept_names = _matching_concept_names(session.graph_nodes, query_text)
@@ -27,6 +31,9 @@ def retrieve_chunks(
     scored: list[tuple[float, int, dict[str, Any], dict[str, Any]]] = []
     for index, raw_chunk in enumerate(session.chunks):
         chunk = _as_dict(raw_chunk)
+        if _string_value(chunk, "textbook_id") not in selected_textbook_ids:
+            continue
+
         content = _string_value(chunk, "content")
         chapter = _string_value(chunk, "chapter")
 
@@ -58,25 +65,40 @@ def answer_query(
     session: KIBotSession,
     question: str,
     llm_client: ChatClient | None = None,
+    use_llm: bool = False,
 ) -> dict[str, Any]:
     retrieved = retrieve_chunks(session, question)
     citations = [result["citation"] for result in retrieved]
+    retrieval_status = (
+        "ready" if _selected_textbook_ids(session.selected_textbooks) else "no_selected_textbooks"
+    )
 
-    if llm_client is not None and retrieved:
+    if use_llm and llm_client is not None and retrieved:
         try:
             llm_response = llm_client.chat(_rag_messages(question, retrieved))
             answer_text = getattr(llm_response, "answer_text", None)
             if isinstance(answer_text, str) and answer_text.strip():
                 return {
                     "answer": answer_text.strip(),
+                    "answer_source": "llm",
+                    "retrieval_status": retrieval_status,
                     "citations": citations,
                     "retrieved_chunks": retrieved,
                 }
-        except Exception:
-            pass
+        except Exception as exc:
+            return {
+                "answer": _fallback_answer(retrieved),
+                "answer_source": "fallback",
+                "retrieval_status": retrieval_status,
+                "llm_error": _safe_error_message(exc),
+                "citations": citations,
+                "retrieved_chunks": retrieved,
+            }
 
     return {
         "answer": _fallback_answer(retrieved),
+        "answer_source": "fallback",
+        "retrieval_status": retrieval_status,
         "citations": citations,
         "retrieved_chunks": retrieved,
     }
@@ -175,6 +197,29 @@ def _terms(text: str) -> set[str]:
         for match in re.finditer(r"[\w]+", text, flags=re.UNICODE)
         if len(match.group(0)) > 1
     }
+
+
+def _selected_textbook_ids(selected_textbooks: list[Any]) -> set[str]:
+    ids: set[str] = set()
+    for selected in selected_textbooks:
+        if isinstance(selected, str) and selected:
+            ids.add(selected)
+            continue
+
+        payload = _as_dict(selected)
+        for key in ("textbook_id", "id"):
+            textbook_id = _string_value(payload, key)
+            if textbook_id:
+                ids.add(textbook_id)
+                break
+    return ids
+
+
+def _safe_error_message(exc: Exception) -> str:
+    message = str(exc).strip()
+    if not message:
+        message = exc.__class__.__name__
+    return re.sub(r"sk-[A-Za-z0-9_-]+", "sk-REDACTED", message)
 
 
 def _citation_for(chunk: dict[str, Any]) -> dict[str, Any]:

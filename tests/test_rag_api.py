@@ -36,6 +36,7 @@ class RagApiTest(unittest.TestCase):
 
     def session_with_chunks(self):
         session = self.store.create_session()
+        session.selected_textbooks.append("book-1")
         session.graph_nodes.append({"node_id": "concept-atp", "name": "ATP"})
         session.chunks.extend(
             [
@@ -74,11 +75,14 @@ class RagApiTest(unittest.TestCase):
                 "session_id": session.session_id,
                 "ready": True,
                 "chunk_count": 2,
+                "selected_textbook_count": 1,
+                "searchable_chunk_count": 2,
                 "graph_node_count": 1,
+                "retrieval_status": "ready",
             },
         )
 
-    def test_query_returns_llm_answer_citations_and_retrieved_scores(self) -> None:
+    def test_query_returns_llm_answer_citations_and_retrieved_scores_with_opt_in(self) -> None:
         calls = []
 
         class FakeLLM:
@@ -91,7 +95,7 @@ class RagApiTest(unittest.TestCase):
 
         response = client.post(
             "/api/rag/query",
-            json={"session_id": session.session_id, "question": "What does ATP do?"},
+            json={"session_id": session.session_id, "question": "What does ATP do?", "use_llm": True},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -101,6 +105,47 @@ class RagApiTest(unittest.TestCase):
         self.assertEqual(payload["retrieved_chunks"][0]["chunk"]["chunk_id"], "chunk-atp")
         self.assertGreater(payload["retrieved_chunks"][0]["score"], 0)
         self.assertIn("What does ATP do?", calls[0][1]["content"])
+
+    def test_query_does_not_call_llm_without_explicit_opt_in(self) -> None:
+        calls = []
+
+        class FakeLLM:
+            def chat(self, messages):
+                calls.append(messages)
+                return SimpleNamespace(answer_text="This should not be used. [1]")
+
+        client = self.client(llm_client=FakeLLM())
+        session = self.session_with_chunks()
+
+        response = client.post(
+            "/api/rag/query",
+            json={"session_id": session.session_id, "question": "What does ATP do?"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(calls, [])
+        self.assertIn("ATP transfers energy", response.json()["answer"])
+        self.assertEqual(response.json()["answer_source"], "fallback")
+
+    def test_query_reports_llm_error_when_opted_in_client_fails(self) -> None:
+        class BrokenLLM:
+            def chat(self, messages):
+                raise RuntimeError("provider unavailable")
+
+        client = self.client(llm_client=BrokenLLM())
+        session = self.session_with_chunks()
+
+        response = client.post(
+            "/api/rag/query",
+            json={"session_id": session.session_id, "question": "What does ATP do?", "use_llm": True},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("ATP transfers energy", payload["answer"])
+        self.assertEqual(payload["answer_source"], "fallback")
+        self.assertIn("llm_error", payload)
+        self.assertNotIn("sk-", payload["llm_error"])
 
     def test_query_accepts_query_alias_and_falls_back_without_llm(self) -> None:
         client = self.client(llm_client=None)
