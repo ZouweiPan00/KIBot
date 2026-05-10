@@ -1,3 +1,5 @@
+import hashlib
+import math
 import re
 from typing import Any, Protocol
 
@@ -8,8 +10,10 @@ from backend.schemas.session import KIBotSession
 
 MAX_RETRIEVED_CHUNKS = 5
 BM25_SCORE = 1.0
+VECTOR_SCORE = 1.0
 CHAPTER_SCORE = 2.0
 CONCEPT_SCORE = 3.0
+HASHED_VECTOR_DIMENSIONS = 256
 
 
 class ChatClient(Protocol):
@@ -45,29 +49,49 @@ def retrieve_chunks(
         return []
 
     bm25_scores = BM25Okapi(tokenized_corpus).get_scores(query_tokens)
+    query_vector = _hashed_embedding_vector(query_tokens)
 
-    scored: list[tuple[float, int, dict[str, Any], dict[str, Any]]] = []
+    scored: list[tuple[float, int, dict[str, Any], dict[str, Any], dict[str, float]]] = []
     for corpus_index, (index, chunk) in enumerate(selected_chunks):
         content = _string_value(chunk, "content")
         chapter = _string_value(chunk, "chapter")
 
-        score = float(bm25_scores[corpus_index]) * BM25_SCORE
-        score += _chapter_match_score(query_terms, chapter)
-        score += _concept_match_score(concept_names, content, chapter)
+        bm25_score = float(bm25_scores[corpus_index]) * BM25_SCORE
+        vector_score = (
+            _cosine_similarity(query_vector, _hashed_embedding_vector(tokenized_corpus[corpus_index]))
+            * VECTOR_SCORE
+        )
+        chapter_score = _chapter_match_score(query_terms, chapter)
+        concept_score = _concept_match_score(concept_names, content, chapter)
+        score = bm25_score + vector_score + chapter_score + concept_score
 
         if score <= 0:
             continue
 
-        scored.append((score, index, chunk, _citation_for(chunk)))
+        scored.append(
+            (
+                score,
+                index,
+                chunk,
+                _citation_for(chunk),
+                {
+                    "bm25_score": bm25_score,
+                    "vector_score": vector_score,
+                    "chapter_score": chapter_score,
+                    "concept_score": concept_score,
+                },
+            )
+        )
 
     scored.sort(key=lambda item: (-item[0], item[1]))
 
     results: list[dict[str, Any]] = []
-    for rank, (score, _index, chunk, citation) in enumerate(scored[:limit], start=1):
+    for rank, (score, _index, chunk, citation, score_parts) in enumerate(scored[:limit], start=1):
         results.append(
             {
                 "rank": rank,
                 "score": score,
+                **score_parts,
                 "chunk": chunk,
                 "citation": citation,
             }
@@ -215,6 +239,31 @@ def _tokens(text: str) -> list[str]:
 
 def _chunk_content_tokens(chunk: dict[str, Any]) -> list[str]:
     return _tokens(_string_value(chunk, "content"))
+
+
+def _hashed_embedding_vector(tokens: list[str]) -> dict[int, float]:
+    """Deterministic lightweight lexical embedding fallback for local vector retrieval."""
+    vector: dict[int, float] = {}
+    for token in tokens:
+        digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+        bucket = int.from_bytes(digest, "big") % HASHED_VECTOR_DIMENSIONS
+        vector[bucket] = vector.get(bucket, 0.0) + 1.0
+    return vector
+
+
+def _cosine_similarity(left: dict[int, float], right: dict[int, float]) -> float:
+    if not left or not right:
+        return 0.0
+
+    dot_product = sum(value * right.get(bucket, 0.0) for bucket, value in left.items())
+    if dot_product <= 0:
+        return 0.0
+
+    left_norm = math.sqrt(sum(value * value for value in left.values()))
+    right_norm = math.sqrt(sum(value * value for value in right.values()))
+    if left_norm == 0 or right_norm == 0:
+        return 0.0
+    return dot_product / (left_norm * right_norm)
 
 
 def _selected_textbook_ids(selected_textbooks: list[Any]) -> set[str]:

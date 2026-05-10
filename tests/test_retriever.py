@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from types import SimpleNamespace
 
 
@@ -135,6 +136,43 @@ class RetrieverTest(unittest.TestCase):
 
         self.assertEqual([result["chunk"]["chunk_id"] for result in results], ["repeated-term", "single-term"])
         self.assertGreater(results[0]["score"], results[1]["score"])
+
+    def test_retrieve_chunks_uses_hashed_vector_score_when_bm25_is_zero(self) -> None:
+        from backend.schemas.session import KIBotSession
+        from backend.services.retriever import retrieve_chunks
+
+        class ZeroBM25:
+            def __init__(self, corpus):
+                self.corpus = corpus
+
+            def get_scores(self, query_tokens):
+                return [0.0 for _ in self.corpus]
+
+        session = KIBotSession(session_id="00000000-0000-0000-0000-000000000005")
+        session.selected_textbooks.append("book-vector")
+        session.chunks.extend(
+            [
+                {
+                    "chunk_id": "vector-match",
+                    "textbook_id": "book-vector",
+                    "chapter": "Overview",
+                    "content": "kinase phosphorylation cascade controls signal transduction.",
+                },
+                {
+                    "chunk_id": "vector-miss",
+                    "textbook_id": "book-vector",
+                    "chapter": "Overview",
+                    "content": "membrane lipids form flexible bilayers.",
+                },
+            ]
+        )
+
+        with patch("backend.services.retriever.BM25Okapi", ZeroBM25):
+            results = retrieve_chunks(session, "kinase phosphorylation", limit=2)
+
+        self.assertEqual([result["chunk"]["chunk_id"] for result in results], ["vector-match"])
+        self.assertGreater(results[0]["vector_score"], 0)
+        self.assertEqual(results[0]["score"], results[0]["vector_score"])
 
     def test_retrieve_chunks_excludes_unselected_textbook_matches(self) -> None:
         from backend.schemas.session import KIBotSession

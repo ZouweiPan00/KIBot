@@ -214,6 +214,17 @@ function RagPanel({
               </span>
             ))}
           </div>
+          <div className="sourceChunkList">
+            {answer.retrieved_chunks.map((result) => (
+              <details key={`${result.chunk.chunk_id || result.rank}`}>
+                <summary>
+                  [{result.rank}] 相关度 {result.score.toFixed(2)} ·{" "}
+                  {cleanTextbookTitle(result.citation.textbook_title || "教材")} {result.citation.chapter || ""}
+                </summary>
+                <p>{result.chunk.content || "暂无原文片段"}</p>
+              </details>
+            ))}
+          </div>
         </article>
       ) : null}
     </div>

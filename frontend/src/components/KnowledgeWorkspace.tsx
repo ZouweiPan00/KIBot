@@ -3,13 +3,19 @@ import { useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
 import { GitBranch, Loader2, Network, RefreshCw, Sparkles } from "lucide-react";
 
-import type { GraphResponse, IntegrationStats, SankeyPayload, Textbook } from "../types";
+import type { GraphNode, GraphResponse, IntegrationStats, SankeyPayload, Textbook } from "../types";
 import { displayTextbookTitle } from "./TextbookPanel";
 
 type ChartParams = {
   name?: string;
   data?: {
+    id?: string;
     displayName?: string;
+    definition?: string;
+    category?: string;
+    chapter?: string;
+    page?: number;
+    textbookTitle?: string;
     source?: string;
     target?: string;
     relationType?: string;
@@ -44,7 +50,23 @@ export function KnowledgeWorkspace({
   onRunIntegration,
 }: Props) {
   const [graphQuery, setGraphQuery] = useState("");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const graphOption = useMemo(() => toGraphOption(graph, graphQuery), [graph, graphQuery]);
+  const selectedNode = useMemo(
+    () => graph.nodes.find((node) => node.id === selectedNodeId) || null,
+    [graph.nodes, selectedNodeId],
+  );
+  const graphEvents = useMemo(
+    () => ({
+      click: (params: ChartParams) => {
+        const nodeId = params.data?.id;
+        if (nodeId) {
+          setSelectedNodeId(nodeId);
+        }
+      },
+    }),
+    [],
+  );
   const sankeyOption = toSankeyOption(sankey, graph, textbooks, Boolean(compressionStats));
   const flowCount = sankeyOption.series[0].links.length;
   const flowSubtitle = flowCount
@@ -114,7 +136,10 @@ export function KnowledgeWorkspace({
             <Network size={20} />
           </div>
           {graph.nodes.length ? (
-            <ReactECharts className="knowledgeChart" option={graphOption} />
+            <>
+              <ReactECharts className="knowledgeChart" option={graphOption} onEvents={graphEvents} />
+              <GraphNodeDetail node={selectedNode} />
+            </>
           ) : (
             <EmptyVisual title="暂无图谱" detail="选择教材后构建图谱" />
           )}
@@ -155,6 +180,33 @@ function EmptyVisual({ title, detail }: { title: string; detail: string }) {
       <strong>{title}</strong>
       <span>{detail}</span>
     </div>
+  );
+}
+
+function GraphNodeDetail({ node }: { node: GraphNode | null }) {
+  if (!node) {
+    return (
+      <div className="graphNodeDetail empty">
+        <strong>点击节点查看详情</strong>
+        <span>展示名称、定义、教材来源、章节与页码。</span>
+      </div>
+    );
+  }
+
+  return (
+    <article className="graphNodeDetail">
+      <div>
+        <span className="mutedLabel">Selected Concept</span>
+        <strong>{node.name || node.label || node.id}</strong>
+      </div>
+      <p>{node.definition || "该节点来自教材章节抽取，暂无独立定义。"}</p>
+      <div className="nodeMetaGrid">
+        <span>{node.category || "concept"}</span>
+        <span>{node.textbook_title || node.textbook_id || "来源教材待确认"}</span>
+        <span>{node.chapter || "章节待确认"}</span>
+        <span>{typeof node.page === "number" ? `第 ${node.page} 页` : "页码待确认"}</span>
+      </div>
+    </article>
   );
 }
 
@@ -217,6 +269,11 @@ function toGraphOption(graph: GraphResponse, query: string) {
             name: node.id,
             id: node.id,
             displayName,
+            definition: node.definition,
+            categoryName: node.category,
+            textbookTitle: node.textbook_title,
+            chapter: node.chapter,
+            page: node.page,
             value: node.frequency || 1,
             symbol: symbolForCategory(node.category),
             symbolSize: Math.max(34, Math.min(78, 30 + (node.importance || 1) * 18)),
