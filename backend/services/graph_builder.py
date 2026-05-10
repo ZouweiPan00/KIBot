@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+import json
 import re
 from typing import Any
 
@@ -77,6 +78,8 @@ def build_knowledge_graph(
     chunks: list[dict[str, Any]],
     *,
     selected_textbook_ids: list[str] | None = None,
+    llm_client: Any | None = None,
+    use_ai: bool = False,
 ) -> KnowledgeGraph:
     selected_ids = set(selected_textbook_ids or [])
     selected_chunks = [
@@ -84,7 +87,27 @@ def build_knowledge_graph(
         for chunk in chunks
         if not selected_ids or _chunk_textbook_id(chunk) in selected_ids
     ]
+    if use_ai and llm_client is not None:
+        ai_graph = build_ai_knowledge_graph(selected_chunks, llm_client)
+        if ai_graph is not None:
+            return ai_graph
 
+    return _build_deterministic_graph(selected_chunks)
+
+
+def build_ai_knowledge_graph(
+    selected_chunks: list[dict[str, Any]],
+    llm_client: Any,
+) -> KnowledgeGraph | None:
+    try:
+        response = _call_llm_client(llm_client, _graph_prompt(selected_chunks))
+        payload = _parse_ai_payload(response)
+        return _validated_ai_graph(payload)
+    except (TypeError, ValueError, AttributeError, KeyError):
+        return None
+
+
+def _build_deterministic_graph(selected_chunks: list[dict[str, Any]]) -> KnowledgeGraph:
     concept_stats: dict[tuple[str, str], _ConceptStats] = {}
     pair_counts: Counter[tuple[str, str]] = Counter()
 
@@ -122,6 +145,205 @@ def build_knowledge_graph(
     visible_node_ids = {node.id for node in nodes}
     edges = _visible_edges(pair_counts, visible_node_ids, nodes)
     return KnowledgeGraph(nodes=nodes, edges=edges)
+
+
+def _call_llm_client(llm_client: Any, prompt: str) -> Any:
+    if callable(llm_client):
+        return llm_client(prompt)
+    if hasattr(llm_client, "complete"):
+        return llm_client.complete(prompt)
+    if hasattr(llm_client, "generate"):
+        return llm_client.generate(prompt)
+    raise TypeError("LLM client must be callable or expose complete/generate")
+
+
+def _graph_prompt(selected_chunks: list[dict[str, Any]]) -> str:
+    schema = {
+        "nodes": [
+            {
+                "name": "",
+                "definition": "",
+                "category": "concept",
+                "textbook_id": "",
+                "textbook_title": "",
+                "chapter": "",
+                "page": 1,
+                "frequency": 1,
+                "importance": 1.0,
+            }
+        ],
+        "edges": [
+            {
+                "source": "",
+                "target": "",
+                "relation_type": "related_to",
+                "description": "",
+                "confidence": 0.5,
+            }
+        ],
+    }
+    chunk_payload = []
+    for chunk in selected_chunks[:20]:
+        chunk_payload.append(
+            {
+                "textbook_id": _chunk_textbook_id(chunk),
+                "textbook_title": str(chunk.get("textbook_title") or ""),
+                "chapter": str(chunk.get("chapter") or ""),
+                "page": _chunk_page(chunk),
+                "content": _concept_source_text(chunk)[:2000],
+            }
+        )
+    return (
+        "Extract a textbook knowledge graph from these chunks. "
+        "Return only JSON matching this schema example: "
+        f"{json.dumps(schema, ensure_ascii=False)}. "
+        f"Chunks: {json.dumps(chunk_payload, ensure_ascii=False)}"
+    )
+
+
+def _parse_ai_payload(response: Any) -> dict[str, Any]:
+    if isinstance(response, dict):
+        return response
+
+    content = response
+    if hasattr(response, "content"):
+        content = response.content
+    elif isinstance(response, list) and response:
+        content = response[0]
+    elif hasattr(response, "choices") and response.choices:
+        choice = response.choices[0]
+        message = getattr(choice, "message", None)
+        content = getattr(message, "content", None) or getattr(choice, "text", None)
+
+    if not isinstance(content, str):
+        raise TypeError("AI response content must be JSON text or a dict")
+
+    text = content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    parsed = json.loads(text)
+    if not isinstance(parsed, dict):
+        raise ValueError("AI response must be a JSON object")
+    return parsed
+
+
+def _validated_ai_graph(payload: dict[str, Any]) -> KnowledgeGraph:
+    raw_nodes = payload.get("nodes")
+    raw_edges = payload.get("edges")
+    if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
+        raise ValueError("AI graph requires nodes and edges lists")
+
+    nodes = [_ai_node(item) for item in raw_nodes]
+    if not nodes:
+        raise ValueError("AI graph requires at least one node")
+
+    nodes = _limit_ai_nodes(nodes)
+    node_ids = {node.id for node in nodes}
+    name_to_id = {node.name.strip().lower(): node.id for node in nodes}
+    visible_edges = [_ai_edge(item, node_ids, name_to_id) for item in raw_edges]
+    return KnowledgeGraph(nodes=sorted(nodes, key=lambda node: node.id), edges=visible_edges)
+
+
+def _ai_node(item: Any) -> GraphNode:
+    if not isinstance(item, dict):
+        raise ValueError("AI node must be an object")
+
+    name = _required_string(item, "name")
+    textbook_id = _required_string(item, "textbook_id")
+    key = str(item.get("id") or name).lower()
+    node_id = str(item.get("id") or _node_id(textbook_id, key))
+    return GraphNode(
+        id=node_id,
+        name=name,
+        definition=_required_string(item, "definition"),
+        category=str(item.get("category") or "concept"),
+        textbook_id=textbook_id,
+        textbook_title=str(item.get("textbook_title") or ""),
+        chapter=str(item.get("chapter") or ""),
+        page=_coerce_int(item.get("page"), default=1),
+        frequency=max(1, _coerce_int(item.get("frequency"), default=1)),
+        importance=_coerce_float(item.get("importance"), default=1.0),
+        status="active",
+    )
+
+
+def _ai_edge(
+    item: Any,
+    node_ids: set[str],
+    name_to_id: dict[str, str],
+) -> GraphEdge:
+    if not isinstance(item, dict):
+        raise ValueError("AI edge must be an object")
+
+    source = _resolve_ai_node_ref(_required_string(item, "source"), node_ids, name_to_id)
+    target = _resolve_ai_node_ref(_required_string(item, "target"), node_ids, name_to_id)
+    relation_type = str(item.get("relation_type") or "related_to")
+    return GraphEdge(
+        id=str(item.get("id") or f"{source}->{target}:{relation_type}"),
+        source=source,
+        target=target,
+        relation_type=relation_type,
+        description=_required_string(item, "description"),
+        confidence=_coerce_float(item.get("confidence"), default=0.5),
+    )
+
+
+def _limit_ai_nodes(nodes: list[GraphNode]) -> list[GraphNode]:
+    by_textbook: dict[str, list[GraphNode]] = defaultdict(list)
+    for node in nodes:
+        by_textbook[node.textbook_id].append(node)
+
+    candidates: list[GraphNode] = []
+    for textbook_id in sorted(by_textbook):
+        ranked = sorted(
+            by_textbook[textbook_id],
+            key=lambda node: (-node.importance, node.name.lower(), node.id),
+        )[:MAX_NODES_PER_TEXTBOOK]
+        candidates.extend(ranked)
+
+    return sorted(
+        candidates,
+        key=lambda node: (-node.importance, node.textbook_id, node.id),
+    )[:MAX_VISIBLE_NODES]
+
+
+def _required_string(item: dict[str, Any], field: str) -> str:
+    value = item.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"AI field {field} must be a non-empty string")
+    return value.strip()
+
+
+def _resolve_ai_node_ref(
+    value: str,
+    node_ids: set[str],
+    name_to_id: dict[str, str],
+) -> str:
+    if value in node_ids:
+        return value
+    resolved = name_to_id.get(value.strip().lower())
+    if resolved is None:
+        raise ValueError("AI edge references an unknown node")
+    return resolved
+
+
+def _coerce_int(value: Any, *, default: int) -> int:
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValueError("AI integer field is invalid") from None
+
+
+def _coerce_float(value: Any, *, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise ValueError("AI float field is invalid") from None
 
 
 def _extract_concepts(content: str) -> Counter[str]:
