@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend.api.graph import router as graph_router
+from backend.api.rag import router as rag_router
 from backend.api.session import router as session_router
 from backend.api.textbooks import router as textbooks_router
 
@@ -17,6 +19,8 @@ app.add_middleware(
 
 app.include_router(session_router)
 app.include_router(textbooks_router)
+app.include_router(graph_router)
+app.include_router(rag_router)
 
 
 @app.get("/api/health")
