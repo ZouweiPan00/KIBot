@@ -1,0 +1,12 @@
+services:
+  kibot:
+    build: .
+    ports:
+      - "7860:7860"
+    environment:
+      SESSION_STORAGE_DIR: /app/data/sessions
+    volumes:
+      - kibot-data:/app/data
+
+volumes:
+  kibot-data:
