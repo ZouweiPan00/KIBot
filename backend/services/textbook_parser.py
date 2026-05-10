@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 import fitz
+from docx import Document
 
 from backend.schemas.textbook import FileType, ParsedChapter, ParsedTextbook
 
@@ -11,6 +12,7 @@ SUPPORTED_FILE_TYPES: dict[str, FileType] = {
     ".txt": "txt",
     ".md": "md",
     ".markdown": "markdown",
+    ".docx": "docx",
 }
 CHAPTER_HEADING_RE = re.compile(r"^第[一二三四五六七八九十百0-9]+[章节]")
 FLEXIBLE_CHAPTER_HEADING_RE = re.compile(
@@ -45,6 +47,8 @@ def parse_textbook(path: str | Path) -> ParsedTextbook:
 
     if file_type == "pdf":
         total_pages, total_chars, chapters = _parse_pdf(textbook_path)
+    elif file_type == "docx":
+        total_pages, total_chars, chapters = _parse_docx(textbook_path)
     else:
         total_pages = 1
         total_text = _read_text_file(textbook_path)
@@ -101,6 +105,18 @@ def _parse_pdf(path: Path) -> tuple[int, int, list[ParsedChapter]]:
         document.close()
 
     return total_pages, total_chars, collector.finish(total_pages)
+
+
+def _parse_docx(path: Path) -> tuple[int, int, list[ParsedChapter]]:
+    try:
+        document = Document(path)
+    except Exception as exc:
+        raise ValueError("Invalid DOCX file") from exc
+
+    paragraphs = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    total_text = "\n".join(paragraphs)
+    total_chars = len(total_text)
+    return 1, total_chars, _detect_chapters([total_text], 1)
 
 
 def _detect_chapters(page_texts: list[str], total_pages: int) -> list[ParsedChapter]:

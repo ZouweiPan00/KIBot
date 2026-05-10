@@ -31,7 +31,7 @@ export interface Textbook {
   textbook_id: string;
   filename: string;
   title: string;
-  file_type: "pdf" | "txt" | "md" | "markdown";
+  file_type: "pdf" | "txt" | "md" | "markdown" | "docx";
   total_pages: number;
   total_chars: number;
   chapters: ParsedChapter[];

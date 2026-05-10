@@ -4,7 +4,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 
-FileType = Literal["pdf", "txt", "md", "markdown"]
+FileType = Literal["pdf", "txt", "md", "markdown", "docx"]
 
 
 def _new_id() -> str:

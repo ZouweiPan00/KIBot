@@ -99,8 +99,42 @@ class RetrieverTest(unittest.TestCase):
         results = retrieve_chunks(session, "respiration", limit=5)
 
         self.assertEqual(len(results), 5)
-        self.assertEqual(results[0]["chunk"]["chunk_id"], "c-atp")
+        self.assertEqual([result["chunk"]["chunk_id"] for result in results], [f"extra-{index}" for index in range(5)])
         self.assertEqual([result["rank"] for result in results], [1, 2, 3, 4, 5])
+
+    def test_retrieve_chunks_uses_bm25_for_repeated_exact_terms(self) -> None:
+        from backend.schemas.session import KIBotSession
+        from backend.services.retriever import retrieve_chunks
+
+        session = KIBotSession(session_id="00000000-0000-0000-0000-000000000004")
+        session.selected_textbooks.append("book-med")
+        session.chunks.extend(
+            [
+                {
+                    "chunk_id": "single-term",
+                    "textbook_id": "book-med",
+                    "chapter": "基础",
+                    "content": "胰岛素 调节血糖。",
+                },
+                {
+                    "chunk_id": "repeated-term",
+                    "textbook_id": "book-med",
+                    "chapter": "基础",
+                    "content": "胰岛素 胰岛素 胰岛素 用于糖尿病治疗。",
+                },
+                {
+                    "chunk_id": "different-term",
+                    "textbook_id": "book-med",
+                    "chapter": "基础",
+                    "content": "甲状腺素 参与代谢调节。",
+                },
+            ]
+        )
+
+        results = retrieve_chunks(session, "胰岛素", limit=2)
+
+        self.assertEqual([result["chunk"]["chunk_id"] for result in results], ["repeated-term", "single-term"])
+        self.assertGreater(results[0]["score"], results[1]["score"])
 
     def test_retrieve_chunks_excludes_unselected_textbook_matches(self) -> None:
         from backend.schemas.session import KIBotSession

@@ -108,6 +108,29 @@ class TextbookParserTest(unittest.TestCase):
         self.assertEqual(parsed.chapters[0].content, content)
         self.assertEqual(parsed.chapters[0].char_count, len(content))
 
+    def test_parse_docx_detects_chapters(self) -> None:
+        from docx import Document
+
+        from backend.services.textbook_parser import parse_textbook
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            textbook_path = Path(temp_dir) / "lesson.docx"
+            document = Document()
+            document.add_paragraph("导言")
+            document.add_paragraph("第一章 细胞")
+            document.add_paragraph("细胞是生命活动的基本单位。")
+            document.add_paragraph("第二章 组织")
+            document.add_paragraph("组织由形态和功能相近的细胞组成。")
+            document.save(textbook_path)
+
+            parsed = parse_textbook(textbook_path)
+
+        self.assertEqual(parsed.filename, "lesson.docx")
+        self.assertEqual(parsed.file_type, "docx")
+        self.assertEqual(parsed.total_pages, 1)
+        self.assertEqual([chapter.title for chapter in parsed.chapters], ["第一章 细胞", "第二章 组织"])
+        self.assertIn("生命活动", parsed.chapters[0].content)
+
     def test_parse_txt_uses_gb18030_fallback_before_replacement(self) -> None:
         from backend.services.textbook_parser import parse_textbook
 
@@ -191,7 +214,7 @@ class TextbookParserTest(unittest.TestCase):
         from backend.services.textbook_parser import parse_textbook
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            textbook_path = Path(temp_dir) / "slides.docx"
+            textbook_path = Path(temp_dir) / "slides.xlsx"
             textbook_path.write_text("not supported", encoding="utf-8")
 
             with self.assertRaises(ValueError):

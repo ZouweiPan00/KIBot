@@ -97,7 +97,7 @@ export function TextbookPanel({
         <span>{uploading ? "上传解析中" : "上传教材"}</span>
         <input
           type="file"
-          accept=".pdf,.txt,.md,.markdown"
+          accept=".pdf,.txt,.md,.markdown,.docx"
           disabled={!sessionId || uploading}
           onChange={(event) => {
             const file = event.currentTarget.files?.[0];

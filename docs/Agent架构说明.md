@@ -1,5 +1,19 @@
 # KIBot Agent 架构说明
 
+## 总体架构
+
+```mermaid
+graph TD
+    A[FastAPI API 层] -->|call: chat / graph / report| B[KIBotOrchestrator]
+    B -->|call: 7 tools| C[Tool Registry]
+    C -->|read/write: textbooks, chunks, graph, decisions, report| D[Session Store]
+    B -->|read: session context| D
+    B -->|call: grounded prompt| E[LLM Client]
+    E -->|write: usage / answer| D
+```
+
+主链路保持单入口：FastAPI 接收请求，Orchestrator 负责选择工具、读取 session 事实源、必要时调用 LLM，并把回答、token usage 或教师修改写回 Session Store。
+
 ## 设计原则
 
 KIBot 第一版采用 single-orchestrator first。原因是比赛演示更需要稳定、可解释的主链路：教材解析、图谱、RAG、教师复核、报告生成应共享同一个 session 事实源，避免多个 agent 同时写状态造成不可复现结果。
@@ -30,6 +44,16 @@ KIBot 第一版采用 single-orchestrator first。原因是比赛演示更需要
 - `get_report(session)`
 
 工具只接收 session 或明确参数，不直接依赖聊天历史。后续扩展多 agent 时，可把这些函数包装为显式 tool schema，由 orchestrator 或 agent cluster 统一调度。
+
+## 架构方案对比
+
+| 方案 | 适用阶段 | 优点 | 代价估计 | 调试难度 |
+| --- | --- | --- | --- | --- |
+| Single Orchestrator | P0 演示与闭环 | 状态单一、可重放、低延迟 | 每轮约 1 次 LLM，2k-8k input tokens | 2/5 |
+| LangGraph | P1 复杂流程 | 有状态图、分支清晰、适合人工审核节点 | 每轮约 2-4 次 LLM，6k-20k input tokens | 3/5 |
+| CrewAI | P2 多角色探索 | 角色拆分自然，适合头脑风暴式任务 | 每轮约 4-8 次 LLM，15k-50k input tokens | 4/5 |
+
+当前选择 Single Orchestrator，是为了把 token 成本、状态一致性和比赛现场调试压力控制在可解释范围内。LangGraph 更适合后续把“抽取-融合-复核-报告”做成显式流程图；CrewAI 更适合多 agent 研究型扩展，不作为首版主链路。
 
 ## Session State
 
@@ -66,6 +90,43 @@ Agent 不把聊天记录当作唯一记忆。结构化 session 是事实源：
 
 LLM client 优先使用 provider 返回的 `usage`；如果 provider 不返回 usage，则按字符数估算。工具层通过 `get_token_usage(session)` 暴露统计，便于前端展示成本、压缩率和调用次数。
 
+## Prompt Engineering
+
+### 图谱抽取 few-shot
+
+system prompt 固定要求：
+
+- 只抽取教材片段中明确出现的概念和关系。
+- 节点名使用教材原文或等价短语，不扩写成外部知识。
+- 关系类型限制在 `包含`、`前置`、`解释`、`对比`、`应用`。
+- 输出 JSON，包含 `nodes`、`edges`、`evidence`、`confidence`。
+
+few-shot 示例保持短小：
+
+```json
+{
+  "chunk": "函数由定义域、值域和对应法则构成。一次函数是函数的一类。",
+  "output": {
+    "nodes": ["函数", "定义域", "值域", "对应法则", "一次函数"],
+    "edges": [
+      {"source": "函数", "target": "定义域", "type": "包含"},
+      {"source": "函数", "target": "值域", "type": "包含"},
+      {"source": "函数", "target": "对应法则", "type": "包含"},
+      {"source": "一次函数", "target": "函数", "type": "解释"}
+    ],
+    "evidence": ["函数由定义域、值域和对应法则构成", "一次函数是函数的一类"],
+    "confidence": 0.86
+  }
+}
+```
+
+### 防幻觉策略
+
+- Retrieved chunks only：LLM 只能使用 RAG 返回片段和 session summary，不允许补充外部教材知识。
+- Confidence output：每个答案、节点合并和关系抽取都输出 `confidence`；低于阈值时标记为待教师复核。
+- JSON schema validation：LLM 输出先过 schema 校验；失败时不进入图谱写入。
+- Fallback to rules：schema 失败或置信度过低时，退回规则抽取、BM25 证据排序和人工复核队列。
+
 ## Cluster-ready 方案
 
 后续多 agent 集群可以按职责拆分：
@@ -78,3 +139,8 @@ LLM client 优先使用 provider 返回的 `usage`；如果 provider 不返回 u
 
 集群模式下仍建议由一个 coordinator 持有写权限，其他 agent 输出建议或 patch，避免并发覆盖 session 状态。
 
+## Roadmap
+
+- P0：BM25 检索。先保证教材片段召回稳定，所有回答和图谱抽取都能追溯到 chunk evidence。
+- P1：LLM secondary dedup。对规则去重后的候选概念做二次语义合并，输出合并理由、证据和置信度。
+- P2：Multi-agent cluster。拆分 Corpus、Graph、Integration、Report、Review agents，但保留 coordinator 单点写入 session。

@@ -1,11 +1,13 @@
 import re
 from typing import Any, Protocol
 
+from rank_bm25 import BM25Okapi
+
 from backend.schemas.session import KIBotSession
 
 
 MAX_RETRIEVED_CHUNKS = 5
-TERM_SCORE = 1.0
+BM25_SCORE = 1.0
 CHAPTER_SCORE = 2.0
 CONCEPT_SCORE = 3.0
 
@@ -25,19 +27,31 @@ def retrieve_chunks(
         return []
 
     query_terms = _terms(query)
+    query_tokens = _tokens(query)
     query_text = query.casefold()
     concept_names = _matching_concept_names(session.graph_nodes, query_text)
 
-    scored: list[tuple[float, int, dict[str, Any], dict[str, Any]]] = []
+    selected_chunks: list[tuple[int, dict[str, Any]]] = []
+    tokenized_corpus: list[list[str]] = []
     for index, raw_chunk in enumerate(session.chunks):
         chunk = _as_dict(raw_chunk)
         if _string_value(chunk, "textbook_id") not in selected_textbook_ids:
             continue
 
+        selected_chunks.append((index, chunk))
+        tokenized_corpus.append(_chunk_content_tokens(chunk))
+
+    if not selected_chunks or not query_tokens:
+        return []
+
+    bm25_scores = BM25Okapi(tokenized_corpus).get_scores(query_tokens)
+
+    scored: list[tuple[float, int, dict[str, Any], dict[str, Any]]] = []
+    for corpus_index, (index, chunk) in enumerate(selected_chunks):
         content = _string_value(chunk, "content")
         chapter = _string_value(chunk, "chapter")
 
-        score = _term_overlap_score(query_terms, content, chapter)
+        score = float(bm25_scores[corpus_index]) * BM25_SCORE
         score += _chapter_match_score(query_terms, chapter)
         score += _concept_match_score(concept_names, content, chapter)
 
@@ -158,11 +172,6 @@ def _compact_excerpt(content: str, max_chars: int = 220) -> str:
     return f"{compact[: max_chars - 3].rstrip()}..."
 
 
-def _term_overlap_score(query_terms: set[str], content: str, chapter: str) -> float:
-    chunk_terms = _terms(f"{chapter} {content}")
-    return float(len(query_terms & chunk_terms)) * TERM_SCORE
-
-
 def _chapter_match_score(query_terms: set[str], chapter: str) -> float:
     chapter_terms = _terms(chapter)
     return float(len(query_terms & chapter_terms)) * CHAPTER_SCORE
@@ -193,11 +202,19 @@ def _matching_concept_names(graph_nodes: list[Any], query_text: str) -> list[str
 
 
 def _terms(text: str) -> set[str]:
-    return {
+    return set(_tokens(text))
+
+
+def _tokens(text: str) -> list[str]:
+    return [
         match.group(0).casefold()
         for match in re.finditer(r"[\w]+", text, flags=re.UNICODE)
         if len(match.group(0)) > 1
-    }
+    ]
+
+
+def _chunk_content_tokens(chunk: dict[str, Any]) -> list[str]:
+    return _tokens(_string_value(chunk, "content"))
 
 
 def _selected_textbook_ids(selected_textbooks: list[Any]) -> set[str]:

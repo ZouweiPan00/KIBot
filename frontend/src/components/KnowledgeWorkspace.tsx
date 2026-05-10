@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+
 import ReactECharts from "echarts-for-react";
 import { GitBranch, Loader2, Network, RefreshCw, Sparkles } from "lucide-react";
 
@@ -41,7 +43,8 @@ export function KnowledgeWorkspace({
   onRefreshGraph,
   onRunIntegration,
 }: Props) {
-  const graphOption = toGraphOption(graph);
+  const [graphQuery, setGraphQuery] = useState("");
+  const graphOption = useMemo(() => toGraphOption(graph, graphQuery), [graph, graphQuery]);
   const sankeyOption = toSankeyOption(sankey, graph, textbooks, Boolean(compressionStats));
   const flowCount = sankeyOption.series[0].links.length;
   const flowSubtitle = flowCount
@@ -59,6 +62,16 @@ export function KnowledgeWorkspace({
           <p>教材知识整合工作台</p>
         </div>
         <div className="topActions">
+          <label className="graphSearch">
+            <span>搜索节点</span>
+            <input
+              type="search"
+              value={graphQuery}
+              onChange={(event) => setGraphQuery(event.target.value)}
+              placeholder="概念 / 章节"
+              aria-label="搜索知识图谱节点"
+            />
+          </label>
           <button className="toolButton" type="button" onClick={onRefreshGraph}>
             <RefreshCw size={17} />
             刷新图谱
@@ -145,7 +158,9 @@ function EmptyVisual({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function toGraphOption(graph: GraphResponse) {
+function toGraphOption(graph: GraphResponse, query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  const hasQuery = Boolean(normalizedQuery);
   const categories = Array.from(new Set(graph.nodes.map((node) => node.category || "concept"))).map(
     (name) => ({ name }),
   );
@@ -190,20 +205,33 @@ function toGraphOption(graph: GraphResponse) {
         },
         force: { repulsion: 360, edgeLength: [95, 175], gravity: 0.08 },
         lineStyle: { color: "source", opacity: 0.28, width: 1.4 },
-        data: graph.nodes.map((node) => ({
-          name: node.id,
-          id: node.id,
-          displayName: node.name || node.label || node.id,
-          value: node.frequency || 1,
-          symbolSize: Math.max(34, Math.min(78, 30 + (node.importance || 1) * 18)),
-          category: Math.max(
-            0,
-            categories.findIndex((category) => category.name === (node.category || "concept")),
-          ),
-          label: {
-            show: labeledNodeIds.has(node.id),
-          },
-        })),
+        data: graph.nodes.map((node) => {
+          const displayName = node.name || node.label || node.id;
+          const matchesQuery =
+            !hasQuery ||
+            [displayName, node.category, node.textbook_title, node.chapter]
+              .filter((value): value is string => Boolean(value))
+              .some((value) => normalizeSearchText(value).includes(normalizedQuery));
+
+          return {
+            name: node.id,
+            id: node.id,
+            displayName,
+            value: node.frequency || 1,
+            symbol: symbolForCategory(node.category),
+            symbolSize: Math.max(34, Math.min(78, 30 + (node.importance || 1) * 18)),
+            category: Math.max(
+              0,
+              categories.findIndex((category) => category.name === (node.category || "concept")),
+            ),
+            itemStyle: {
+              opacity: matchesQuery ? 1 : 0.18,
+            },
+            label: {
+              show: matchesQuery && (hasQuery || labeledNodeIds.has(node.id)),
+            },
+          };
+        }),
         links: graph.edges.map((edge) => ({
           source: edge.source,
           target: edge.target,
@@ -213,6 +241,27 @@ function toGraphOption(graph: GraphResponse) {
       },
     ],
   };
+}
+
+function symbolForCategory(category?: string): "circle" | "rect" | "triangle" | "diamond" | "roundRect" {
+  const normalized = (category || "concept").toLowerCase();
+  if (normalized.includes("chapter") || normalized.includes("教材") || normalized.includes("source")) {
+    return "rect";
+  }
+  if (normalized.includes("relation") || normalized.includes("path") || normalized.includes("edge")) {
+    return "triangle";
+  }
+  if (normalized.includes("term") || normalized.includes("keyword") || normalized.includes("术语")) {
+    return "diamond";
+  }
+  if (normalized.includes("case") || normalized.includes("example")) {
+    return "roundRect";
+  }
+  return "circle";
+}
+
+function normalizeSearchText(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/\s+/g, "");
 }
 
 function toSankeyOption(
