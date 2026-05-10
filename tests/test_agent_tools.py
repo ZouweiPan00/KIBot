@@ -35,6 +35,22 @@ class AgentToolsTest(unittest.TestCase):
             ],
         )
 
+    def test_get_selected_textbooks_resolves_schema_textbook_id_values(self) -> None:
+        from backend.tools.textbook_tool import get_selected_textbooks
+
+        session = self.make_session()
+        session.selected_textbooks = ["book-1"]
+        session.textbooks = [
+            {"textbook_id": "book-1", "title": "Biology", "total_chars": 1200}
+        ]
+
+        selected = get_selected_textbooks(session)
+
+        self.assertEqual(
+            selected,
+            [{"textbook_id": "book-1", "title": "Biology", "total_chars": 1200}],
+        )
+
     def test_compression_stats_and_token_usage_handle_dict_and_object_items(self) -> None:
         from backend.tools.stats_tool import get_compression_stats, get_token_usage
 
