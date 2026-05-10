@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from backend.schemas.session import KIBotSession
 from backend.services.session_store import SessionStore
@@ -42,3 +42,17 @@ def reset_session(
         raise HTTPException(status_code=400, detail="Invalid session ID") from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Session not found") from exc
+
+
+@router.delete("/{session_id}", status_code=204)
+def delete_session(
+    session_id: str,
+    session_store: SessionStore = Depends(get_session_store),
+) -> Response:
+    try:
+        session_store.delete_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid session ID") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Session not found") from exc
+    return Response(status_code=204)

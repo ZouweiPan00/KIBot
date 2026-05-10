@@ -143,6 +143,23 @@ class SessionStoreTest(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 store.get_session(str(uuid4()))
 
+    def test_delete_session_removes_session_directory_and_validates_id(self) -> None:
+        from backend.services.session_store import SessionStore
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = SessionStore(storage_dir=Path(temp_dir))
+            session = store.create_session()
+            session_dir = Path(temp_dir) / session.session_id
+
+            self.assertTrue(session_dir.exists())
+            store.delete_session(session.session_id)
+
+            self.assertFalse(session_dir.exists())
+            with self.assertRaises(FileNotFoundError):
+                store.get_session(session.session_id)
+            with self.assertRaises(ValueError):
+                store.delete_session("../escape")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,8 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 const SESSION_KEY = "kibot.session_id";
+const ARCHIVED_SESSION_KEY = "kibot.archived_session_ids";
+const MAX_ARCHIVED_SESSIONS = 5;
 
 class ApiError extends Error {
   status: number;
@@ -48,6 +50,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const detail = await response.text();
     throw new ApiError(response.status, formatHttpError(response.status, detail, response.statusText));
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return (await response.json()) as T;
@@ -122,6 +128,40 @@ export function storeSessionId(sessionId: SessionId): void {
   localStorage.setItem(SESSION_KEY, sessionId);
 }
 
+export function readArchivedSessionIds(): SessionId[] {
+  const raw = localStorage.getItem(ARCHIVED_SESSION_KEY);
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((item): item is SessionId => typeof item === "string" && item.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+export function storeArchivedSessionIds(sessionIds: SessionId[]): void {
+  localStorage.setItem(ARCHIVED_SESSION_KEY, JSON.stringify(sessionIds.slice(-MAX_ARCHIVED_SESSIONS)));
+}
+
+export async function archiveCurrentAndCreateSession(currentSessionId: SessionId | null): Promise<KIBotSession> {
+  let archived = readArchivedSessionIds();
+  if (currentSessionId) {
+    archived = [...archived.filter((sessionId) => sessionId !== currentSessionId), currentSessionId];
+  }
+
+  const expired = archived.length > MAX_ARCHIVED_SESSIONS ? archived.slice(0, archived.length - MAX_ARCHIVED_SESSIONS) : [];
+  const retained = archived.slice(-MAX_ARCHIVED_SESSIONS);
+  storeArchivedSessionIds(retained);
+
+  await Promise.all(expired.map((sessionId) => deleteSession(sessionId).catch(() => undefined)));
+  return createSession();
+}
+
 export async function bootstrapSession(): Promise<KIBotSession> {
   const stored = readStoredSessionId();
   if (stored) {
@@ -145,6 +185,10 @@ export async function createSession(): Promise<KIBotSession> {
 
 export async function getSession(sessionId: SessionId): Promise<KIBotSession> {
   return request<KIBotSession>(`/api/session/${encodeURIComponent(sessionId)}`);
+}
+
+export async function deleteSession(sessionId: SessionId): Promise<void> {
+  await request<void>(`/api/session/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
 }
 
 export async function listTextbooks(sessionId: SessionId): Promise<Textbook[]> {

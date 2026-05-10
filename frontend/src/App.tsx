@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  archiveCurrentAndCreateSession,
   bootstrapSession,
   buildGraph,
-  createSession,
   generateReport,
   getGraph,
   getIntegrationDecisions,
@@ -243,21 +243,20 @@ export default function App() {
   }
 
   async function handleRefreshSession() {
-    if (!sessionId) {
-      return;
-    }
-
     setSessionBusy(true);
+    setLoading(true);
     setLeftError(null);
     setRightError(null);
+    clearWorkspaceState();
     try {
-      const nextSession = await getSession(sessionId);
+      const nextSession = await archiveCurrentAndCreateSession(sessionId);
       applySessionSnapshot(nextSession);
       await refreshAll(nextSession.session_id, nextSession);
     } catch (error) {
-      setLeftError(readableError(error, "刷新当前会话失败"));
+      setLeftError(readableError(error, "更新会话失败"));
     } finally {
       setSessionBusy(false);
+      setLoading(false);
     }
   }
 
@@ -268,7 +267,7 @@ export default function App() {
     setRightError(null);
     clearWorkspaceState();
     try {
-      const nextSession = await createSession();
+      const nextSession = await archiveCurrentAndCreateSession(sessionId);
       applySessionSnapshot(nextSession);
       await refreshAll(nextSession.session_id, nextSession);
     } catch (error) {
