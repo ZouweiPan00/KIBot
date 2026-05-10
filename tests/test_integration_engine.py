@@ -60,6 +60,21 @@ class IntegrationEngineTest(unittest.TestCase):
         self.assertTrue(
             any("Teaching outline" in decision["compact_note"] for decision in result.decisions)
         )
+        first_sources = result.decisions[0]["sources"]
+        self.assertLessEqual(len(first_sources), 8)
+        self.assertEqual(
+            len(first_sources),
+            len(
+                {
+                    (
+                        source["textbook_id"],
+                        source["chapter"],
+                        source["name"],
+                    )
+                    for source in first_sources
+                }
+            ),
+        )
 
     def test_run_integration_merges_similar_selected_graph_nodes_and_budgets_notes(self) -> None:
         from backend.schemas.session import KIBotSession

@@ -310,7 +310,8 @@ def _decision(
     reason: str,
     confidence: float,
 ) -> dict[str, Any]:
-    source_payloads = [_source_payload(source) for source in sources]
+    unique_sources = _unique_sources(sources)
+    source_payloads = [_source_payload(source) for source in unique_sources]
     decision_id = _decision_id(action, concept_name, source_payloads)
     return {
         "decision_id": decision_id,
@@ -319,7 +320,7 @@ def _decision(
         "sources": source_payloads,
         "reason": reason,
         "confidence": round(confidence, 2),
-        "compact_note": _compact_note(action, concept_name, sources),
+        "compact_note": _compact_note(action, concept_name, unique_sources),
         "teacher_note": "",
     }
 
@@ -397,7 +398,7 @@ def _textbook_total_chars(textbook: Any) -> int:
 
 
 def _compact_note(action: IntegrationAction, concept_name: str, sources: list[_Candidate]) -> str:
-    titles = "、".join(source.textbook_title for source in sources)
+    titles = "、".join(dict.fromkeys(source.textbook_title for source in sources if source.textbook_title))
     if action == "merge":
         return f"{concept_name}: integrate overlapping explanations from {titles}."
     return f"{concept_name}: keep as a distinct concept from {titles}."
@@ -481,6 +482,43 @@ def _source_payload(source: _Candidate) -> dict[str, Any]:
         "textbook_title": source.textbook_title,
         "chapter": source.chapter,
     }
+
+
+def _unique_sources(sources: list[_Candidate]) -> list[_Candidate]:
+    by_textbook: dict[str, list[_Candidate]] = defaultdict(list)
+    seen: set[tuple[str, str, str]] = set()
+    for source in sorted(
+        sources,
+        key=lambda item: (
+            item.textbook_id,
+            item.chapter,
+            _normalize_name(item.name),
+            item.candidate_id,
+        ),
+    ):
+        key = (source.textbook_id, source.chapter, _normalize_name(source.name))
+        if key in seen:
+            continue
+        seen.add(key)
+        by_textbook[source.textbook_id].append(source)
+
+    unique: list[_Candidate] = []
+    textbook_ids = sorted(by_textbook)
+    offset = 0
+    while len(unique) < MAX_SOURCES_PER_DECISION and textbook_ids:
+        added = False
+        for textbook_id in textbook_ids:
+            candidates = by_textbook[textbook_id]
+            if offset >= len(candidates):
+                continue
+            unique.append(candidates[offset])
+            added = True
+            if len(unique) >= MAX_SOURCES_PER_DECISION:
+                break
+        if not added:
+            break
+        offset += 1
+    return unique
 
 
 def _source_sankey_name(source: dict[str, Any]) -> str:
