@@ -389,11 +389,6 @@ export default function App() {
         onSelectAll={handleSelectAll}
         onRefreshSession={handleRefreshSession}
         onNewSession={handleNewSession}
-        onRefresh={() => {
-          if (sessionId) {
-            void refreshTextbooks(sessionId);
-          }
-        }}
       />
 
       <KnowledgeWorkspace

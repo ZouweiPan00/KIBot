@@ -5,7 +5,6 @@ import {
   FileUp,
   Loader2,
   PlusCircle,
-  RefreshCw,
   RotateCcw,
 } from "lucide-react";
 
@@ -35,7 +34,6 @@ interface Props {
   onSelectAll: () => void;
   onRefreshSession: () => void;
   onNewSession: () => void;
-  onRefresh: () => void;
 }
 
 export function TextbookPanel({
@@ -52,10 +50,10 @@ export function TextbookPanel({
   onSelectAll,
   onRefreshSession,
   onNewSession,
-  onRefresh,
 }: Props) {
   const totalChars = textbooks.reduce((sum, book) => sum + (book.total_chars || 0), 0);
   const totalChapters = textbooks.reduce((sum, book) => sum + (book.chapters?.length || 0), 0);
+  const slotBooks = assignSlotBooks(textbooks);
 
   return (
     <aside className="panel leftPanel" aria-label="教材管理">
@@ -64,9 +62,6 @@ export function TextbookPanel({
           <span className="sectionKicker">Textbook Corpus</span>
           <h2>教材管理</h2>
         </div>
-        <button className="iconButton" type="button" onClick={onRefresh} aria-label="刷新教材列表">
-          <RefreshCw size={18} />
-        </button>
       </div>
 
       <div className="sessionCard">
@@ -116,7 +111,7 @@ export function TextbookPanel({
       <div className="metricGrid" aria-label="教材解析指标">
         <div>
           <span>已上传</span>
-          <strong>{textbooks.length}/7</strong>
+          <strong>{textbooks.length}</strong>
         </div>
         <div>
           <span>已选择</span>
@@ -146,7 +141,7 @@ export function TextbookPanel({
 
       <div className="textbookList" aria-busy={loading}>
         {MEDICAL_TEXTBOOKS.map((slotName, index) => {
-          const book = findSlotBook(textbooks, slotName, index);
+          const book = slotBooks[index];
           const selected = book ? selectedIds.has(book.textbook_id) : false;
 
           return (
@@ -164,7 +159,7 @@ export function TextbookPanel({
                 <div className="bookMeta">
                   {book
                     ? `${book.chapters?.length || 0} 章 / ${compactNumber(book.total_chars)} 字`
-                    : "保留教材槽位"}
+                    : "测试教材"}
                 </div>
               </div>
               {book ? (
@@ -189,11 +184,38 @@ export function TextbookPanel({
   );
 }
 
-function findSlotBook(textbooks: Textbook[], slotName: string, index: number): Textbook | undefined {
-  return (
-    textbooks.find((book) => book.title.includes(slotName) || book.filename.includes(slotName)) ||
-    textbooks[index]
-  );
+function assignSlotBooks(textbooks: Textbook[]): Array<Textbook | undefined> {
+  const slots: Array<Textbook | undefined> = Array(MEDICAL_TEXTBOOKS.length).fill(undefined);
+  const unmatched: Textbook[] = [];
+
+  for (const book of textbooks) {
+    const index = textbookSlotIndex(book);
+    if (index >= 0 && index < slots.length && !slots[index]) {
+      slots[index] = book;
+    } else {
+      unmatched.push(book);
+    }
+  }
+
+  for (const book of unmatched) {
+    const emptyIndex = slots.findIndex((item) => !item);
+    if (emptyIndex === -1) {
+      break;
+    }
+    slots[emptyIndex] = book;
+  }
+
+  return slots;
+}
+
+function textbookSlotIndex(book: Textbook): number {
+  const rawTitle = book.title || "";
+  const filename = book.filename || "";
+  const prefix = titlePrefix(rawTitle) || titlePrefix(filename);
+  if (prefix) {
+    return Number(prefix) - 1;
+  }
+  return MEDICAL_TEXTBOOKS.findIndex((slotName) => rawTitle.includes(slotName) || filename.includes(slotName));
 }
 
 export function displayTextbookTitle(book: Textbook, index?: number): string {
