@@ -147,6 +147,31 @@ class IntegrationApiTest(unittest.TestCase):
         self.assertEqual(unknown.status_code, 404)
         self.assertEqual(missing_decision.status_code, 404)
 
+    def test_run_returns_structured_error_when_engine_fails(self) -> None:
+        import backend.api.integration as integration_api
+
+        client = self.client()
+        session = self.session_with_integration_inputs()
+        original_run_integration = integration_api.run_integration
+
+        def fail_integration(_session):
+            raise RuntimeError("boom")
+
+        integration_api.run_integration = fail_integration
+        try:
+            response = client.post(
+                "/api/integration/run",
+                json={"session_id": session.session_id},
+            )
+        finally:
+            integration_api.run_integration = original_run_integration
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(
+            response.json(),
+            {"detail": "Integration failed. Please retry with fewer selected textbooks."},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
