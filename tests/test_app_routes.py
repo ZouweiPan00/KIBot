@@ -18,6 +18,7 @@ class AppRoutesTest(unittest.TestCase):
         self.store = SessionStore(storage_dir=Path(self.temp_dir.name))
 
     def tearDown(self) -> None:
+        import backend.api.chat as chat_api
         import backend.api.graph as graph_api
         import backend.api.integration as integration_api
         import backend.api.rag as rag_api
@@ -25,6 +26,7 @@ class AppRoutesTest(unittest.TestCase):
 
         from app import app
 
+        app.dependency_overrides.pop(chat_api.get_session_store, None)
         app.dependency_overrides.pop(graph_api.get_session_store, None)
         app.dependency_overrides.pop(integration_api.get_session_store, None)
         app.dependency_overrides.pop(rag_api.get_session_store, None)
@@ -33,6 +35,7 @@ class AppRoutesTest(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def client(self):
+        import backend.api.chat as chat_api
         import backend.api.graph as graph_api
         import backend.api.integration as integration_api
         import backend.api.rag as rag_api
@@ -41,6 +44,7 @@ class AppRoutesTest(unittest.TestCase):
         from app import app
         from fastapi.testclient import TestClient
 
+        app.dependency_overrides[chat_api.get_session_store] = lambda: self.store
         app.dependency_overrides[graph_api.get_session_store] = lambda: self.store
         app.dependency_overrides[integration_api.get_session_store] = lambda: self.store
         app.dependency_overrides[rag_api.get_session_store] = lambda: self.store
@@ -112,6 +116,13 @@ class AppRoutesTest(unittest.TestCase):
         )
         self.assertEqual(report.status_code, 200)
         self.assertIn("KIBot 教材整合报告", report.json()["markdown"])
+
+        chat = client.post(
+            "/api/chat/message",
+            json={"session_id": session.session_id, "message": "explain ATP"},
+        )
+        self.assertEqual(chat.status_code, 200)
+        self.assertIn("assistant_message", chat.json())
 
 
 if __name__ == "__main__":
