@@ -20,6 +20,17 @@ class ParsedChapter(BaseModel):
     char_count: int
 
 
+class TextbookChunk(BaseModel):
+    chunk_id: str = Field(default_factory=_new_id)
+    textbook_id: str
+    textbook_title: str
+    chapter: str
+    page_start: int = 1
+    page_end: int = 1
+    content: str
+    char_count: int
+
+
 class ParsedTextbook(BaseModel):
     textbook_id: str = Field(default_factory=_new_id)
     filename: str

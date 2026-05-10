@@ -82,6 +82,14 @@ class TextbooksApiTest(unittest.TestCase):
         self.assertEqual(len(saved.chapters), 1)
         self.assertEqual(saved.chapters[0]["textbook_id"], parsed["textbook_id"])
         self.assertEqual(saved.chapters[0]["title"], "第一章 开始")
+        self.assertEqual(len(saved.chunks), 1)
+        self.assertEqual(saved.chunks[0]["textbook_id"], parsed["textbook_id"])
+        self.assertEqual(saved.chunks[0]["textbook_title"], "Unsafe Name")
+        self.assertEqual(saved.chunks[0]["chapter"], "第一章 开始")
+        self.assertEqual(saved.chunks[0]["page_start"], 1)
+        self.assertEqual(saved.chunks[0]["page_end"], 1)
+        self.assertEqual(saved.chunks[0]["content"], content)
+        self.assertEqual(saved.chunks[0]["char_count"], len(content))
 
     def test_uploading_same_original_filename_keeps_distinct_upload_files(self) -> None:
         client = self.client()
@@ -221,6 +229,12 @@ class TextbooksApiTest(unittest.TestCase):
                 {"chapter_id": "chapter-2", "textbook_id": "book-2", "title": "二"},
             ]
         )
+        session.chunks.extend(
+            [
+                {"chunk_id": "chunk-1", "textbook_id": "book-1", "content": "一"},
+                {"chunk_id": "chunk-2", "textbook_id": "book-2", "content": "二"},
+            ]
+        )
         self.store.save_session(session)
 
         listed = client.get(f"/api/textbooks?session_id={session.session_id}")
@@ -262,6 +276,10 @@ class TextbooksApiTest(unittest.TestCase):
         self.assertEqual(
             [chapter["chapter_id"] for chapter in saved.chapters],
             ["chapter-2"],
+        )
+        self.assertEqual(
+            [chunk["chunk_id"] for chunk in saved.chunks],
+            ["chunk-2"],
         )
 
     def test_management_endpoints_validate_session_id(self) -> None:

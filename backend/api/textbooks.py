@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 
 from backend.schemas.session import KIBotSession
 from backend.schemas.textbook import ParsedTextbook
+from backend.services.chunker import chunk_textbook
 from backend.services.session_store import SessionStore
 from backend.services.textbook_parser import get_file_type, parse_textbook
 
@@ -53,6 +54,7 @@ async def upload_textbook(
     parsed_payload = parsed.model_dump(mode="json")
     session.textbooks.append(parsed_payload)
     session.chapters.extend(_session_chapter_payloads(parsed))
+    session.chunks.extend(_session_chunk_payloads(parsed))
     session_store.save_session(session)
 
     return parsed
@@ -106,6 +108,11 @@ def delete_textbook(
         chapter
         for chapter in session.chapters
         if _chapter_textbook_id(chapter) != textbook_id
+    ]
+    session.chunks = [
+        chunk
+        for chunk in session.chunks
+        if _chunk_textbook_id(chunk) != textbook_id
     ]
     session_store.save_session(session)
 
@@ -189,6 +196,10 @@ def _session_chapter_payloads(parsed: ParsedTextbook) -> list[dict[str, Any]]:
     return payloads
 
 
+def _session_chunk_payloads(parsed: ParsedTextbook) -> list[dict[str, Any]]:
+    return [chunk.model_dump(mode="json") for chunk in chunk_textbook(parsed)]
+
+
 def _ensure_textbook_exists(session: KIBotSession, textbook_id: str) -> None:
     if any(_textbook_id(textbook) == textbook_id for textbook in session.textbooks):
         return
@@ -208,4 +219,12 @@ def _chapter_textbook_id(chapter: Any) -> str | None:
         value = chapter.get("textbook_id")
         return value if isinstance(value, str) else None
     value = getattr(chapter, "textbook_id", None)
+    return value if isinstance(value, str) else None
+
+
+def _chunk_textbook_id(chunk: Any) -> str | None:
+    if isinstance(chunk, dict):
+        value = chunk.get("textbook_id")
+        return value if isinstance(value, str) else None
+    value = getattr(chunk, "textbook_id", None)
     return value if isinstance(value, str) else None
