@@ -1,6 +1,6 @@
 # KIBot Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **For Claude:** REQUIRED SUBSKILL: Use superpowers:executing-plans to implement this plan task by task.
 
 **Goal:** Build KIBot, a Docker-deployable web dashboard that integrates multiple textbooks into a <=30% knowledge core with graph visualization, RAG citations, teacher feedback, and report generation.
 
@@ -1089,4 +1089,3 @@ Use this script:
 11. Show decision, graph, compression stats, and report updated.
 12. Open report preview.
 ```
-
