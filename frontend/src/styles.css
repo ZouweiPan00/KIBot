@@ -328,6 +328,13 @@ h2 {
   gap: 10px;
 }
 
+.customTextbookSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .textbookItem {
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) auto;

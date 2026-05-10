@@ -7,6 +7,7 @@ import {
   PlusCircle,
   RotateCcw,
 } from "lucide-react";
+import type { ReactNode } from "react";
 
 import type { Textbook } from "../types";
 
@@ -53,7 +54,7 @@ export function TextbookPanel({
 }: Props) {
   const totalChars = textbooks.reduce((sum, book) => sum + (book.total_chars || 0), 0);
   const totalChapters = textbooks.reduce((sum, book) => sum + (book.chapters?.length || 0), 0);
-  const slotBooks = assignSlotBooks(textbooks);
+  const { slotBooks, customBooks } = assignTextbookGroups(textbooks);
 
   return (
     <aside className="panel leftPanel" aria-label="教材管理">
@@ -145,67 +146,97 @@ export function TextbookPanel({
           const selected = book ? selectedIds.has(book.textbook_id) : false;
 
           return (
-            <article className={`textbookItem ${selected ? "selected" : ""}`} key={slotName}>
-              <div className="bookIcon" aria-hidden="true">
-                {selected ? <CheckCircle2 size={18} /> : <BookOpen size={18} />}
-              </div>
-              <div className="bookBody">
-                <div className="bookTitleRow">
-                  <strong title={book ? displayTextbookTitle(book, index) : slotName}>
-                    {book ? displayTextbookTitle(book, index) : slotName}
-                  </strong>
-                  <span>{book ? book.file_type.toUpperCase() : "待上传"}</span>
-                </div>
-                <div className="bookMeta">
-                  {book
-                    ? `${book.chapters?.length || 0} 章 / ${compactNumber(book.total_chars)} 字`
-                    : "测试教材"}
-                </div>
-              </div>
-              {book ? (
-                <button
-                  className="slotAction"
-                  type="button"
-                  onClick={() => onSelect(book.textbook_id)}
-                  disabled={selected}
-                >
-                  {selected ? "已选" : "选择"}
-                </button>
-              ) : (
+            <TextbookItem
+              key={slotName}
+              book={book}
+              title={book ? displayTextbookTitle(book, index) : slotName}
+              selected={selected}
+              onSelect={onSelect}
+              emptyAction={
                 <span className="emptySlot">
                   {loading ? <Loader2 size={14} className="spin" /> : <Circle size={12} />}
                 </span>
-              )}
-            </article>
+              }
+            />
           );
         })}
       </div>
+
+      {customBooks.length ? (
+        <div className="customTextbookSection">
+          <span className="mutedLabel">Custom Uploads</span>
+          <div className="textbookList" aria-label="自定义上传教材">
+            {customBooks.map((book) => {
+              const selected = selectedIds.has(book.textbook_id);
+
+              return (
+                <TextbookItem
+                  key={book.textbook_id}
+                  book={book}
+                  title={displayTextbookTitle(book)}
+                  selected={selected}
+                  onSelect={onSelect}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }
 
-function assignSlotBooks(textbooks: Textbook[]): Array<Textbook | undefined> {
+interface TextbookItemProps {
+  book?: Textbook;
+  title: string;
+  selected: boolean;
+  onSelect: (textbookId: string) => void;
+  emptyAction?: ReactNode;
+}
+
+function TextbookItem({ book, title, selected, onSelect, emptyAction }: TextbookItemProps) {
+  return (
+    <article className={`textbookItem ${selected ? "selected" : ""}`}>
+      <div className="bookIcon" aria-hidden="true">
+        {selected ? <CheckCircle2 size={18} /> : <BookOpen size={18} />}
+      </div>
+      <div className="bookBody">
+        <div className="bookTitleRow">
+          <strong title={title}>{title}</strong>
+          <span>{book ? book.file_type.toUpperCase() : "待上传"}</span>
+        </div>
+        <div className="bookMeta">
+          {book ? `${book.chapters?.length || 0} 章 / ${compactNumber(book.total_chars)} 字` : "测试教材"}
+        </div>
+      </div>
+      {book ? (
+        <button className="slotAction" type="button" onClick={() => onSelect(book.textbook_id)} disabled={selected}>
+          {selected ? "已选" : "选择"}
+        </button>
+      ) : (
+        emptyAction
+      )}
+    </article>
+  );
+}
+
+function assignTextbookGroups(textbooks: Textbook[]): {
+  slotBooks: Array<Textbook | undefined>;
+  customBooks: Textbook[];
+} {
   const slots: Array<Textbook | undefined> = Array(MEDICAL_TEXTBOOKS.length).fill(undefined);
-  const unmatched: Textbook[] = [];
+  const customBooks: Textbook[] = [];
 
   for (const book of textbooks) {
     const index = textbookSlotIndex(book);
     if (index >= 0 && index < slots.length && !slots[index]) {
       slots[index] = book;
     } else {
-      unmatched.push(book);
+      customBooks.push(book);
     }
   }
 
-  for (const book of unmatched) {
-    const emptyIndex = slots.findIndex((item) => !item);
-    if (emptyIndex === -1) {
-      break;
-    }
-    slots[emptyIndex] = book;
-  }
-
-  return slots;
+  return { slotBooks: slots, customBooks };
 }
 
 function textbookSlotIndex(book: Textbook): number {
@@ -213,17 +244,22 @@ function textbookSlotIndex(book: Textbook): number {
   const filename = book.filename || "";
   const prefix = titlePrefix(rawTitle) || titlePrefix(filename);
   if (prefix) {
-    return Number(prefix) - 1;
+    const index = Number(prefix) - 1;
+    const expectedTitle = MEDICAL_TEXTBOOKS[index];
+    if (expectedTitle && containsPresetTitle(book, expectedTitle)) {
+      return index;
+    }
   }
-  return MEDICAL_TEXTBOOKS.findIndex((slotName) => rawTitle.includes(slotName) || filename.includes(slotName));
+  return MEDICAL_TEXTBOOKS.findIndex((slotName) => containsPresetTitle(book, slotName));
 }
 
 export function displayTextbookTitle(book: Textbook, index?: number): string {
   const rawTitle = book.title || book.filename || "";
   const prefix = titlePrefix(rawTitle) || titlePrefix(book.filename);
   if (prefix) {
-    const mapped = MEDICAL_TEXTBOOKS[Number(prefix) - 1];
-    if (mapped) {
+    const prefixIndex = Number(prefix) - 1;
+    const mapped = MEDICAL_TEXTBOOKS[prefixIndex];
+    if (mapped && containsPresetTitle(book, mapped)) {
       return mapped;
     }
   }
@@ -240,6 +276,21 @@ function titlePrefix(value: string): string | null {
 
 function looksLikePlaceholderTitle(value: string): boolean {
   return /^0?[1-7][_\-\s.．、]*_*$/.test(value.trim());
+}
+
+function containsPresetTitle(book: Textbook, presetTitle: string): boolean {
+  const normalizedPresetTitle = normalizeTextbookSignal(presetTitle);
+  return [book.title, book.filename]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => normalizeTextbookSignal(value).includes(normalizedPresetTitle));
+}
+
+function normalizeTextbookSignal(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/\.(pdf|txt|md|markdown)$/i, "")
+    .replace(/[\s_\-.．、()（）[\]【】《》<>]+/g, "");
 }
 
 function compactNumber(value: number): string {
