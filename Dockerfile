@@ -12,7 +12,8 @@ RUN npm run build
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    SESSION_STORAGE_DIR=/mnt/workspace/kibot/sessions
 
 WORKDIR /app
 
