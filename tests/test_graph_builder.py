@@ -113,7 +113,7 @@ class GraphBuilderTest(unittest.TestCase):
         self.assertTrue(graph.nodes)
         self.assertEqual({node.textbook_id for node in graph.nodes}, {"math-1"})
 
-    def test_extracts_fallback_concepts_from_chunk_title_and_chapter(self) -> None:
+    def test_extracts_fallback_concepts_from_chunk_content_without_title_noise(self) -> None:
         from backend.services.graph_builder import build_knowledge_graph
 
         graph = build_knowledge_graph(
@@ -124,13 +124,13 @@ class GraphBuilderTest(unittest.TestCase):
                     "textbook_title": "Cell Biology",
                     "chapter": "Membrane Transport",
                     "page_start": 4,
-                    "content": "and the for with",
+                    "content": "Membrane transport depends on diffusion gradients.",
                 }
             ]
         )
 
-        self.assertIn("bio-1:cell", [node.id for node in graph.nodes])
         self.assertIn("bio-1:membrane", [node.id for node in graph.nodes])
+        self.assertNotIn("bio-1:cell", [node.id for node in graph.nodes])
 
     def test_extracts_chinese_concepts_from_selected_chunks(self) -> None:
         from backend.services.graph_builder import build_knowledge_graph
@@ -154,6 +154,27 @@ class GraphBuilderTest(unittest.TestCase):
         membrane = next(node for node in graph.nodes if node.id == "bio-1:细胞膜")
         self.assertEqual(membrane.name, "细胞膜")
         self.assertEqual(membrane.frequency, 2)
+
+    def test_filters_chapter_heading_tokens_from_chinese_concepts(self) -> None:
+        from backend.services.graph_builder import build_knowledge_graph
+
+        graph = build_knowledge_graph(
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "textbook_id": "bio-1",
+                    "textbook_title": "组织学与胚胎学",
+                    "chapter": "第二章 上皮组织",
+                    "page_start": 9,
+                    "content": "第二章 上皮组织 上皮细胞 构成 上皮组织。",
+                }
+            ],
+            selected_textbook_ids=["bio-1"],
+        )
+
+        node_ids = [node.id for node in graph.nodes]
+        self.assertNotIn("bio-1:第二章", node_ids)
+        self.assertIn("bio-1:上皮组织", node_ids)
 
 
 if __name__ == "__main__":

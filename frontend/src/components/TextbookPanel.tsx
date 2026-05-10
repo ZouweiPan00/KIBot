@@ -9,7 +9,7 @@ import {
 
 import type { Textbook } from "../types";
 
-const MEDICAL_TEXTBOOKS = [
+export const MEDICAL_TEXTBOOKS = [
   "局部解剖学",
   "组织学与胚胎学",
   "生理学",
@@ -132,7 +132,9 @@ export function TextbookPanel({
               </div>
               <div className="bookBody">
                 <div className="bookTitleRow">
-                  <strong title={book?.title || slotName}>{book?.title || slotName}</strong>
+                  <strong title={book ? displayTextbookTitle(book, index) : slotName}>
+                    {book ? displayTextbookTitle(book, index) : slotName}
+                  </strong>
                   <span>{book ? book.file_type.toUpperCase() : "待上传"}</span>
                 </div>
                 <div className="bookMeta">
@@ -168,6 +170,30 @@ function findSlotBook(textbooks: Textbook[], slotName: string, index: number): T
     textbooks.find((book) => book.title.includes(slotName) || book.filename.includes(slotName)) ||
     textbooks[index]
   );
+}
+
+export function displayTextbookTitle(book: Textbook, index?: number): string {
+  const rawTitle = book.title || book.filename || "";
+  const prefix = titlePrefix(rawTitle) || titlePrefix(book.filename);
+  if (prefix) {
+    const mapped = MEDICAL_TEXTBOOKS[Number(prefix) - 1];
+    if (mapped) {
+      return mapped;
+    }
+  }
+  if (typeof index === "number" && looksLikePlaceholderTitle(rawTitle)) {
+    return MEDICAL_TEXTBOOKS[index] || rawTitle;
+  }
+  return rawTitle;
+}
+
+function titlePrefix(value: string): string | null {
+  const match = value.match(/^\s*0?([1-7])(?:[_\-\s.．、]|$)/);
+  return match ? match[1] : null;
+}
+
+function looksLikePlaceholderTitle(value: string): boolean {
+  return /^0?[1-7][_\-\s.．、]*_*$/.test(value.trim());
 }
 
 function compactNumber(value: number): string {

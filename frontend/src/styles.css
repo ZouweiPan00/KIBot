@@ -142,6 +142,7 @@ h2 {
 
 .iconButton,
 .toolButton,
+.wideAction,
 .slotAction,
 .tabBar button {
   display: inline-flex;
@@ -170,6 +171,14 @@ h2 {
   font-weight: 800;
 }
 
+.wideAction {
+  gap: 8px;
+  min-height: 40px;
+  width: 100%;
+  color: var(--green);
+  font-weight: 850;
+}
+
 .toolButton.primary {
   border-color: #286f60;
   background: var(--green);
@@ -187,6 +196,7 @@ h2 {
 
 .iconButton:hover,
 .toolButton:hover,
+.wideAction:hover,
 .slotAction:hover,
 .tabBar button:hover {
   border-color: #a8b5c4;
@@ -376,7 +386,7 @@ h2 {
 }
 
 .summaryStrip {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 12px;
   box-shadow: var(--shadow);
 }

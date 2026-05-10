@@ -2,6 +2,7 @@ import ReactECharts from "echarts-for-react";
 import { GitBranch, Loader2, Network, RefreshCw, Sparkles } from "lucide-react";
 
 import type { GraphResponse, IntegrationStats, SankeyPayload, Textbook } from "../types";
+import { displayTextbookTitle } from "./TextbookPanel";
 
 interface Props {
   graph: GraphResponse;
@@ -34,12 +35,12 @@ export function KnowledgeWorkspace({
   const sankeyOption = toSankeyOption(sankey, graph, textbooks);
 
   return (
-    <section className="centerPanel" aria-label="KIBot 医学知识集成仪表盘">
+    <section className="centerPanel" aria-label="KIBot 知识集成仪表盘">
       <header className="topBar">
         <div className="brandBlock">
           <span className="sectionKicker">Knowledge Integration</span>
           <h1>KIBot</h1>
-          <p>医学教材知识整合工作台</p>
+          <p>教材知识整合工作台</p>
         </div>
         <div className="topActions">
           <button className="toolButton" type="button" onClick={onRefreshGraph}>
@@ -78,7 +79,7 @@ export function KnowledgeWorkspace({
         <div className="visualWorkspace">
           <div className="workspaceHeader">
             <div>
-              <h2>医学知识图谱</h2>
+              <h2>知识图谱</h2>
               <span>实体、证据与教材来源</span>
             </div>
             <Network size={20} />
@@ -178,7 +179,7 @@ function toGraphOption(graph: GraphResponse) {
 }
 
 function toSankeyOption(sankey: SankeyPayload | null, graph: GraphResponse, textbooks: Textbook[]) {
-  const fallback = sankey || fallbackSankey(graph, textbooks);
+  const fallback = prettifySankeyLabels(sankey || fallbackSankey(graph, textbooks), textbooks);
 
   return {
     tooltip: { trigger: "item" },
@@ -205,11 +206,42 @@ function fallbackSankey(graph: GraphResponse, textbooks: Textbook[]): SankeyPayl
   }
 
   const target = "整合知识图谱";
-  const nodes = [...textbooks.map((book) => ({ name: book.title })), { name: target }];
-  const links = textbooks.map((book) => ({
-    source: book.title,
+  const nodes = [...textbooks.map((book, index) => ({ name: displayTextbookTitle(book, index) })), { name: target }];
+  const links = textbooks.map((book, index) => ({
+    source: displayTextbookTitle(book, index),
     target,
     value: Math.max(1, graph.nodes.filter((node) => node.textbook_id === book.textbook_id).length),
   }));
   return { nodes, links };
+}
+
+function prettifySankeyLabels(sankey: SankeyPayload, textbooks: Textbook[]): SankeyPayload {
+  const titlePairs = textbooks.map((book, index) => ({
+    raw: book.title,
+    pretty: displayTextbookTitle(book, index),
+  }));
+
+  function prettyName(name: string): string {
+    for (const { raw, pretty } of titlePairs) {
+      if (!raw || raw === pretty) {
+        continue;
+      }
+      if (name === raw) {
+        return pretty;
+      }
+      if (name.startsWith(`${raw}-`)) {
+        return `${pretty}-${name.slice(raw.length + 1)}`;
+      }
+    }
+    return name;
+  }
+
+  return {
+    nodes: sankey.nodes.map((node) => ({ name: prettyName(node.name) })),
+    links: sankey.links.map((link) => ({
+      ...link,
+      source: prettyName(link.source),
+      target: prettyName(link.target),
+    })),
+  };
 }

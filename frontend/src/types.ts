@@ -122,6 +122,12 @@ export interface RAGResponse {
   retrieved_chunks: RetrievedChunk[];
 }
 
+export interface ChatResponse {
+  assistant_message: string;
+  parsed_intent: Record<string, unknown>;
+  state_summary: Record<string, unknown>;
+}
+
 export interface IntegrationDecision {
   decision_id?: string;
   concept_name?: string;

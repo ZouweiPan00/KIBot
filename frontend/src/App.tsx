@@ -13,6 +13,7 @@ import {
   listTextbooks,
   queryRag,
   runIntegration,
+  sendChatMessage,
   selectTextbook,
   uploadTextbook,
 } from "./api";
@@ -21,6 +22,7 @@ import { RightTabs } from "./components/RightTabs";
 import { TextbookPanel } from "./components/TextbookPanel";
 import type {
   GraphResponse,
+  ChatResponse,
   IntegrationStats,
   IntegrationDecision,
   KIBotSession,
@@ -41,6 +43,7 @@ export default function App() {
   const [decisions, setDecisions] = useState<IntegrationDecision[]>([]);
   const [ragStatus, setRagStatus] = useState<RAGStatus | null>(null);
   const [ragAnswer, setRagAnswer] = useState<RAGResponse | null>(null);
+  const [chatAnswer, setChatAnswer] = useState<ChatResponse | null>(null);
   const [report, setReport] = useState<ReportState | null>(null);
   const [compressionStats, setCompressionStats] = useState<IntegrationStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [selectingAll, setSelectingAll] = useState(false);
   const [ragLoading, setRagLoading] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
   const [sankeyUnavailable, setSankeyUnavailable] = useState(false);
   const [decisionsUnavailable, setDecisionsUnavailable] = useState(false);
   const [reportUnavailable, setReportUnavailable] = useState(false);
@@ -164,7 +168,6 @@ export default function App() {
 
     setUploading(true);
     setLeftError(null);
-    setSelectingAll(true);
     try {
       await uploadTextbook(sessionId, file);
       await refreshTextbooks(sessionId);
@@ -289,6 +292,24 @@ export default function App() {
     }
   }
 
+  async function handleTeacherMessage(message: string) {
+    if (!sessionId || !message.trim()) {
+      return;
+    }
+
+    setChatLoading(true);
+    setRightError(null);
+    try {
+      const answer = await sendChatMessage(sessionId, message.trim());
+      setChatAnswer(answer);
+      await refreshOptionalPanels(sessionId, session);
+    } catch (error) {
+      setRightError(readableError(error, "教师对话失败"));
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
   return (
     <main className="appShell">
       <TextbookPanel
@@ -331,9 +352,12 @@ export default function App() {
         report={report}
         reportUnavailable={reportUnavailable}
         tokenUsage={session?.token_usage || { calls: 0, input_tokens: 0, output_tokens: 0, total_tokens: 0 }}
-        busy={ragLoading}
+        chatAnswer={chatAnswer}
+        busy={ragLoading || chatLoading}
+        chatBusy={chatLoading}
         error={rightError}
         onAskRag={handleAskRag}
+        onTeacherMessage={handleTeacherMessage}
       />
     </main>
   );

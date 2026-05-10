@@ -1,5 +1,6 @@
 import type {
   GraphResponse,
+  ChatResponse,
   IntegrationDecision,
   IntegrationRunResponse,
   IntegrationStats,
@@ -125,6 +126,13 @@ export async function queryRag(sessionId: SessionId, question: string): Promise<
   return request<RAGResponse>("/api/rag/query", {
     method: "POST",
     body: JSON.stringify({ session_id: sessionId, question, use_llm: false }),
+  });
+}
+
+export async function sendChatMessage(sessionId: SessionId, message: string): Promise<ChatResponse> {
+  return request<ChatResponse>("/api/chat/message", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId, message }),
   });
 }
 

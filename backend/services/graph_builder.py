@@ -12,6 +12,7 @@ MIN_TOKEN_LENGTH = 3
 
 _TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
 _CJK_TOKEN_RE = re.compile(r"[\u4e00-\u9fff]{2,12}")
+_CHAPTER_TOKEN_RE = re.compile(r"^第[一二三四五六七八九十百千万两0-9]+[章节篇]?$")
 _STOPWORDS = {
     "about",
     "after",
@@ -35,6 +36,28 @@ _STOPWORDS = {
     "use",
     "uses",
     "with",
+}
+_CJK_STOPWORDS = {
+    "第一章",
+    "第二章",
+    "第三章",
+    "第四章",
+    "第五章",
+    "第六章",
+    "第七章",
+    "第八章",
+    "第九章",
+    "第十章",
+    "第一节",
+    "第二节",
+    "第三节",
+    "目录",
+    "教材",
+    "内容",
+    "章节",
+    "本章",
+    "学习目标",
+    "复习题",
 }
 
 
@@ -110,15 +133,14 @@ def _extract_concepts(content: str) -> Counter[str]:
             continue
         counts[key] += 1
     for match in _CJK_TOKEN_RE.finditer(content):
-        counts[match.group(0)] += 1
+        key = _clean_cjk_concept(match.group(0))
+        if key:
+            counts[key] += 1
     return counts
 
 
 def _concept_source_text(chunk: dict[str, Any]) -> str:
-    return " ".join(
-        str(chunk.get(field) or "")
-        for field in ("textbook_title", "chapter", "content")
-    )
+    return str(chunk.get("content") or "")
 
 
 def _visible_nodes(stats: Any) -> list[GraphNode]:
@@ -197,6 +219,18 @@ def _display_name(key: str) -> str:
     if re.search(r"[\u4e00-\u9fff]", key):
         return key
     return key.replace("_", " ").title()
+
+
+def _clean_cjk_concept(value: str) -> str:
+    key = value.strip()
+    key = re.sub(r"^第[一二三四五六七八九十百千万两0-9]+[章节篇]", "", key)
+    if len(key) < 2:
+        return ""
+    if key in _CJK_STOPWORDS or _CHAPTER_TOKEN_RE.match(key):
+        return ""
+    if re.fullmatch(r"[一二三四五六七八九十百千万两0-9]+", key):
+        return ""
+    return key
 
 
 def _chunk_textbook_id(chunk: dict[str, Any]) -> str:

@@ -13,6 +13,18 @@ SUPPORTED_FILE_TYPES: dict[str, FileType] = {
     ".markdown": "markdown",
 }
 CHAPTER_HEADING_RE = re.compile(r"^第[一二三四五六七八九十百0-9]+[章节]")
+FLEXIBLE_CHAPTER_HEADING_RE = re.compile(
+    r"^第\s*[一二三四五六七八九十百千万两0-9]+\s*[章节篇]"
+)
+MEDICAL_TEXTBOOK_TITLES_BY_PREFIX = {
+    "01": "局部解剖学",
+    "02": "组织学与胚胎学",
+    "03": "生理学",
+    "04": "医学微生物学",
+    "05": "病理学",
+    "06": "传染病学",
+    "07": "病理生理学",
+}
 
 
 def get_file_type(filename: str | Path) -> FileType:
@@ -37,12 +49,21 @@ def parse_textbook(path: str | Path) -> ParsedTextbook:
 
     return ParsedTextbook(
         filename=textbook_path.name,
-        title=textbook_path.stem,
+        title=_infer_textbook_title(textbook_path),
         file_type=file_type,
         total_pages=total_pages,
         total_chars=total_chars,
         chapters=chapters,
     )
+
+
+def _infer_textbook_title(path: Path) -> str:
+    stem = path.stem.strip()
+    prefix_match = re.match(r"^\s*(0?[1-7])(?:[_\-\s.．、]|$)", stem)
+    if prefix_match:
+        prefix = prefix_match.group(1).zfill(2)
+        return MEDICAL_TEXTBOOK_TITLES_BY_PREFIX[prefix]
+    return stem
 
 
 def _read_text_file(path: Path) -> str:
@@ -100,13 +121,13 @@ class _ChapterCollector:
 
         for line in page_text.splitlines(keepends=True):
             stripped = line.strip()
-            if CHAPTER_HEADING_RE.match(stripped):
+            if _is_chapter_heading(stripped):
                 if self.current_title is not None:
                     self._append_current_chapter()
                 else:
                     self.fallback_parts.clear()
 
-                self.current_title = stripped
+                self.current_title = _normalize_chapter_title(stripped)
                 self.current_start_page = page_index
                 self.current_end_page = page_index
                 self.current_lines = [line]
@@ -162,3 +183,16 @@ def _make_chapter(
         content=content,
         char_count=len(content),
     )
+
+
+def _is_chapter_heading(text: str) -> bool:
+    return bool(CHAPTER_HEADING_RE.match(text) or FLEXIBLE_CHAPTER_HEADING_RE.match(text))
+
+
+def _normalize_chapter_title(text: str) -> str:
+    title = re.sub(
+        r"^第\s*([一二三四五六七八九十百千万两0-9]+)\s*([章节篇])",
+        r"第\1\2",
+        text.strip(),
+    )
+    return re.sub(r"\s+", " ", title)

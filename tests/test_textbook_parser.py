@@ -42,6 +42,23 @@ class TextbookParserTest(unittest.TestCase):
             [len(chapter.content) for chapter in parsed.chapters],
         )
 
+    def test_parse_txt_detects_pdf_extracted_spaced_chapter_headings(self) -> None:
+        from backend.services.textbook_parser import parse_textbook
+
+        content = "目录\n第 一 章 细胞\n细胞内容。\n第 2 节 结构\n结构内容。"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            textbook_path = Path(temp_dir) / "02__textbook.txt"
+            textbook_path.write_text(content, encoding="utf-8")
+
+            parsed = parse_textbook(textbook_path)
+
+        self.assertEqual(parsed.title, "组织学与胚胎学")
+        self.assertEqual(
+            [chapter.title for chapter in parsed.chapters],
+            ["第一章 细胞", "第2节 结构"],
+        )
+
     def test_parse_markdown_without_heading_falls_back_to_full_text(self) -> None:
         from backend.services.textbook_parser import parse_textbook
 

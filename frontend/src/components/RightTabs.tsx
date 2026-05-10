@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 
 import type {
+  ChatResponse,
   IntegrationDecision,
   RAGResponse,
   RAGStatus,
@@ -38,9 +39,12 @@ interface Props {
   report: ReportState | null;
   reportUnavailable: boolean;
   tokenUsage: TokenUsage;
+  chatAnswer: ChatResponse | null;
   busy: boolean;
+  chatBusy: boolean;
   error: string | null;
   onAskRag: (question: string) => void;
+  onTeacherMessage: (message: string) => void;
 }
 
 export function RightTabs({
@@ -51,9 +55,12 @@ export function RightTabs({
   report,
   reportUnavailable,
   tokenUsage,
+  chatAnswer,
   busy,
+  chatBusy,
   error,
   onAskRag,
+  onTeacherMessage,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>("decisions");
   const [question, setQuestion] = useState("炎症反应的核心机制是什么？");
@@ -103,7 +110,13 @@ export function RightTabs({
           />
         ) : null}
 
-        {activeTab === "teacher" ? <TeacherPanel /> : null}
+        {activeTab === "teacher" ? (
+          <TeacherPanel
+            answer={chatAnswer}
+            busy={chatBusy}
+            onSend={onTeacherMessage}
+          />
+        ) : null}
 
         {activeTab === "report" ? (
           <ReportPanel report={report} unavailable={reportUnavailable} />
@@ -203,22 +216,47 @@ function RagPanel({
   );
 }
 
-function TeacherPanel() {
+function TeacherPanel({
+  answer,
+  busy,
+  onSend,
+}: {
+  answer: ChatResponse | null;
+  busy: boolean;
+  onSend: (message: string) => void;
+}) {
+  const [message, setMessage] = useState("请解释上皮组织这个整合决策");
+
   return (
     <div className="teacherPanel">
-      <EmptyPanel
-        icon={<MessageSquareText size={19} />}
-        title="教师对话"
-        detail="聊天接口合并后将承接修改意见、复核记录与报告再生成。"
-      />
       <div className="messagePreview">
         <span>教师</span>
-        <p>请优先保留跨教材共识，再标注定义差异。</p>
+        <p>可输入 explain、keep、remove、merge、split 等复核意见。</p>
       </div>
-      <div className="messagePreview assistant">
-        <span>KIBot</span>
-        <p>已准备记录复核意见。</p>
+      <div className="questionBox">
+        <textarea value={message} onChange={(event) => setMessage(event.target.value)} />
+        <button
+          className="toolButton primary"
+          type="button"
+          disabled={busy || !message.trim()}
+          onClick={() => onSend(message)}
+        >
+          <Send size={16} />
+          发送意见
+        </button>
       </div>
+      {answer ? (
+        <div className="messagePreview assistant">
+          <span>KIBot</span>
+          <p>{answer.assistant_message}</p>
+        </div>
+      ) : (
+        <EmptyPanel
+          icon={<MessageSquareText size={19} />}
+          title="等待教师意见"
+          detail="发送后会更新整合决策、图谱状态和对话记忆。"
+        />
+      )}
     </div>
   );
 }
