@@ -1,0 +1,616 @@
+:root {
+  color: #17212f;
+  background: #edf1f5;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --amber: #c17c22;
+  --blue: #3867b7;
+  --green: #2f7d6d;
+  --line: #d7dfe8;
+  --panel: #fbfcfe;
+  --panel-strong: #ffffff;
+  --red: #a74855;
+  --shadow: 0 18px 42px rgba(31, 44, 60, 0.1);
+  --soft: #526273;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button {
+  color: inherit;
+  font: inherit;
+}
+
+.appShell {
+  display: grid;
+  grid-template-columns: minmax(330px, 390px) minmax(680px, 1fr) minmax(340px, 430px);
+  gap: 18px;
+  min-height: 100vh;
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(237, 241, 245, 0.96)),
+    #edf1f5;
+}
+
+.panel,
+.centerPanel {
+  min-width: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.leftPanel,
+.rightPanel {
+  padding: 18px;
+}
+
+.centerPanel {
+  display: grid;
+  grid-template-rows: auto auto minmax(380px, 1fr) auto;
+  gap: 14px;
+}
+
+.panelHeader,
+.topBar,
+.workspaceHeader,
+.tableTitle,
+.bookTitleRow,
+.cardTitle,
+.agentFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  margin-top: 2px;
+  font-size: 4rem;
+  line-height: 0.96;
+  letter-spacing: 0;
+}
+
+h2 {
+  margin-top: 4px;
+  font-size: 1.1rem;
+  line-height: 1.2;
+}
+
+h3 {
+  font-size: 0.92rem;
+}
+
+.sectionKicker,
+.mutedLabel {
+  display: block;
+  color: var(--soft);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.topBar {
+  min-height: 132px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px 22px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+
+.brandBlock {
+  min-width: 220px;
+}
+
+.topBar p {
+  margin-top: 10px;
+  color: var(--soft);
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.topActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.iconButton,
+.toolButton,
+.segmentedControl button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.iconButton {
+  width: 40px;
+  height: 40px;
+}
+
+.toolButton {
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  color: #26384c;
+  font-weight: 800;
+}
+
+.toolButton.primary {
+  border-color: #286f60;
+  background: var(--green);
+  color: #ffffff;
+}
+
+.iconButton:hover,
+.toolButton:hover,
+.segmentedControl button:hover {
+  border-color: #a8b5c4;
+  box-shadow: 0 10px 24px rgba(31, 44, 60, 0.12);
+  transform: translateY(-1px);
+}
+
+.sessionCard,
+.agentStatus,
+.agentCard,
+.decisionTable,
+.visualWorkspace,
+.summaryStrip,
+.agentFooter {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+.sessionCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px;
+}
+
+.sessionCard strong,
+.agentStatus strong,
+.agentFooter strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 1rem;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.statusPill.ready {
+  background: #dff2ee;
+  color: #286f60;
+}
+
+.metricGrid,
+.summaryStrip {
+  display: grid;
+  gap: 10px;
+}
+
+.metricGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metricGrid div,
+.summaryStrip div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.metricGrid div {
+  padding: 14px;
+}
+
+.metricGrid span,
+.summaryStrip span,
+.bookMeta,
+.summaryStrip small {
+  color: var(--soft);
+  font-size: 0.82rem;
+}
+
+.metricGrid strong,
+.summaryStrip strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.34rem;
+}
+
+.summaryStrip small {
+  display: block;
+  margin-top: 4px;
+}
+
+.textbookList,
+.agentStack,
+.queueList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.textbookItem {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 70px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  background: #ffffff;
+}
+
+.bookIcon,
+.agentBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.bookIcon {
+  width: 38px;
+  height: 38px;
+  background: #e4f1ed;
+  color: var(--green);
+}
+
+.bookBody {
+  min-width: 0;
+}
+
+.bookTitleRow strong,
+.bookTitleRow span,
+.tinyState,
+.decisionRow span,
+.decisionRow strong,
+.queueItem span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookTitleRow strong {
+  min-width: 0;
+}
+
+.bookTitleRow span,
+.tinyState {
+  color: var(--soft);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.tinyState {
+  max-width: 64px;
+}
+
+.summaryStrip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.summaryStrip div {
+  padding: 13px 15px;
+}
+
+.visualWorkspace {
+  display: grid;
+  grid-template-rows: auto minmax(320px, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.workspaceHeader {
+  padding: 16px 18px 10px;
+}
+
+.workspaceHeader span {
+  color: var(--soft);
+  font-size: 0.82rem;
+}
+
+.segmentedControl {
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  background: #f4f7fa;
+}
+
+.segmentedControl button {
+  min-height: 32px;
+  border-color: transparent;
+  padding: 0 11px;
+  color: var(--soft);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.segmentedControl button.active {
+  background: #ffffff;
+  color: #17212f;
+  box-shadow: 0 6px 16px rgba(31, 44, 60, 0.1);
+}
+
+.knowledgeChart {
+  min-height: 440px;
+  height: 100%;
+}
+
+.decisionTable {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+
+.tableTitle {
+  justify-content: flex-start;
+  color: var(--green);
+}
+
+.decisionRow {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(180px, 0.8fr) minmax(78px, auto);
+  gap: 10px;
+  align-items: center;
+  min-height: 38px;
+  border-top: 1px solid #edf1f5;
+  color: var(--soft);
+  font-size: 0.88rem;
+}
+
+.decisionRow span:first-child {
+  color: #17212f;
+  font-weight: 800;
+}
+
+.decisionRow strong {
+  color: var(--amber);
+  text-align: right;
+}
+
+.agentBadge {
+  width: 42px;
+  height: 42px;
+  background: #eaf0fb;
+  color: var(--blue);
+}
+
+.agentStatus {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+}
+
+.agentStatus span {
+  display: block;
+  margin-top: 3px;
+  color: var(--soft);
+  font-size: 0.86rem;
+}
+
+.pulseDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--green);
+  box-shadow: 0 0 0 6px rgba(47, 125, 109, 0.13);
+}
+
+.agentCard {
+  padding: 14px;
+}
+
+.cardTitle {
+  justify-content: flex-start;
+  color: var(--blue);
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.toolCall {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  color: var(--soft);
+  font-size: 0.86rem;
+}
+
+.toolCall strong {
+  color: #17212f;
+}
+
+.progressTrack {
+  overflow: hidden;
+  height: 8px;
+  margin-top: 10px;
+  border-radius: 8px;
+  background: #e8edf3;
+}
+
+.progressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--green);
+}
+
+.agentCard p {
+  margin-top: 10px;
+  color: #34465c;
+  font-size: 0.88rem;
+  line-height: 1.48;
+}
+
+.insightCard {
+  border-color: #d8e5df;
+  background: #f8fbfa;
+}
+
+.queueList {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.queueItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  color: var(--soft);
+  font-size: 0.88rem;
+}
+
+.queueItem svg {
+  flex: 0 0 auto;
+  color: var(--amber);
+}
+
+.agentFooter {
+  padding: 13px;
+  color: var(--red);
+}
+
+.agentFooter strong {
+  color: #17212f;
+}
+
+.agentFooter svg {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1180px) {
+  .appShell {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .centerPanel {
+    grid-row: 1;
+  }
+
+  .topBar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topActions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .appShell {
+    padding: 10px;
+  }
+
+  .leftPanel,
+  .rightPanel,
+  .topBar {
+    padding: 14px;
+  }
+
+  h1 {
+    font-size: 2.8rem;
+  }
+
+  .summaryStrip,
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspaceHeader,
+  .decisionRow {
+    align-items: flex-start;
+  }
+
+  .workspaceHeader {
+    flex-direction: column;
+  }
+
+  .decisionRow {
+    grid-template-columns: 1fr;
+    gap: 4px;
+    padding: 8px 0;
+  }
+
+  .decisionRow strong {
+    text-align: left;
+  }
+
+  .textbookItem {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .bookIcon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .tinyState {
+    grid-column: 2;
+    max-width: none;
+  }
+}
