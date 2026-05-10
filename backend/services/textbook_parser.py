@@ -28,20 +28,19 @@ def parse_textbook(path: str | Path) -> ParsedTextbook:
     file_type = get_file_type(textbook_path)
 
     if file_type == "pdf":
-        page_texts = _read_pdf_pages(textbook_path)
+        total_pages, total_chars, chapters = _parse_pdf(textbook_path)
     else:
-        page_texts = [_read_text_file(textbook_path)]
-
-    total_pages = len(page_texts) if file_type == "pdf" else 1
-    total_text = "".join(page_texts)
-    chapters = _detect_chapters(page_texts, total_pages)
+        total_pages = 1
+        total_text = _read_text_file(textbook_path)
+        total_chars = len(total_text)
+        chapters = _detect_chapters([total_text], total_pages)
 
     return ParsedTextbook(
         filename=textbook_path.name,
         title=textbook_path.stem,
         file_type=file_type,
         total_pages=total_pages,
-        total_chars=len(total_text),
+        total_chars=total_chars,
         chapters=chapters,
     )
 
@@ -56,68 +55,97 @@ def _read_text_file(path: Path) -> str:
     return data.decode("gb18030", errors="replace")
 
 
-def _read_pdf_pages(path: Path) -> list[str]:
-    document = fitz.open(path)
+def _parse_pdf(path: Path) -> tuple[int, int, list[ParsedChapter]]:
     try:
-        return [page.get_text() for page in document]
+        document = fitz.open(path)
+    except (fitz.FileDataError, ValueError) as exc:
+        raise ValueError("Invalid PDF file") from exc
+
+    collector = _ChapterCollector()
+    total_chars = 0
+    try:
+        total_pages = document.page_count
+        for page_index, page in enumerate(document, start=1):
+            try:
+                page_text = page.get_text()
+            except (RuntimeError, ValueError) as exc:
+                raise ValueError("Invalid PDF file") from exc
+            total_chars += len(page_text)
+            collector.add_page(page_text, page_index)
     finally:
         document.close()
 
+    return total_pages, total_chars, collector.finish(total_pages)
+
 
 def _detect_chapters(page_texts: list[str], total_pages: int) -> list[ParsedChapter]:
-    chapters: list[ParsedChapter] = []
-    current_title: str | None = None
-    current_start_page = 1
-    current_end_page = 1
-    current_lines: list[str] = []
-
+    collector = _ChapterCollector()
     for page_index, page_text in enumerate(page_texts, start=1):
+        collector.add_page(page_text, page_index)
+    return collector.finish(total_pages)
+
+
+class _ChapterCollector:
+    def __init__(self) -> None:
+        self.chapters: list[ParsedChapter] = []
+        self.current_title: str | None = None
+        self.current_start_page = 1
+        self.current_end_page = 1
+        self.current_lines: list[str] = []
+        self.fallback_parts: list[str] = []
+
+    def add_page(self, page_text: str, page_index: int) -> None:
+        if self.current_title is None and not self.chapters:
+            self.fallback_parts.append(page_text)
+
         for line in page_text.splitlines(keepends=True):
             stripped = line.strip()
             if CHAPTER_HEADING_RE.match(stripped):
-                if current_title is not None:
-                    chapters.append(
-                        _make_chapter(
-                            title=current_title,
-                            page_start=current_start_page,
-                            page_end=current_end_page,
-                            content="".join(current_lines),
-                        )
-                    )
+                if self.current_title is not None:
+                    self._append_current_chapter()
+                else:
+                    self.fallback_parts.clear()
 
-                current_title = stripped
-                current_start_page = page_index
-                current_end_page = page_index
-                current_lines = [line]
+                self.current_title = stripped
+                self.current_start_page = page_index
+                self.current_end_page = page_index
+                self.current_lines = [line]
                 continue
 
-            if current_title is not None:
-                current_lines.append(line)
-                current_end_page = page_index
+            if self.current_title is not None:
+                self.current_lines.append(line)
+                self.current_end_page = page_index
 
-    if current_title is not None:
-        chapters.append(
+    def finish(self, total_pages: int) -> list[ParsedChapter]:
+        if self.current_title is not None:
+            self._append_current_chapter()
+            self.current_title = None
+
+        if self.chapters:
+            return self.chapters
+
+        page_end = total_pages if total_pages > 0 else 1
+        return [
             _make_chapter(
-                title=current_title,
-                page_start=current_start_page,
-                page_end=current_end_page,
-                content="".join(current_lines),
+                title="全文",
+                page_start=1,
+                page_end=page_end,
+                content="".join(self.fallback_parts),
+            )
+        ]
+
+    def _append_current_chapter(self) -> None:
+        if self.current_title is None:
+            return
+
+        self.chapters.append(
+            _make_chapter(
+                title=self.current_title,
+                page_start=self.current_start_page,
+                page_end=self.current_end_page,
+                content="".join(self.current_lines),
             )
         )
-
-    if chapters:
-        return chapters
-
-    full_text = "".join(page_texts)
-    page_end = total_pages if total_pages > 0 else 1
-    return [
-        _make_chapter(
-            title="全文",
-            page_start=1,
-            page_end=page_end,
-            content=full_text,
-        )
-    ]
 
 
 def _make_chapter(

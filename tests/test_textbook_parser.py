@@ -130,6 +130,16 @@ class TextbookParserTest(unittest.TestCase):
         self.assertIn("第一页内容", parsed.chapters[0].content)
         self.assertIn("第二页内容", parsed.chapters[1].content)
 
+    def test_parse_pdf_rejects_corrupt_pdf_as_value_error(self) -> None:
+        from backend.services.textbook_parser import parse_textbook
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            textbook_path = Path(temp_dir) / "broken.pdf"
+            textbook_path.write_bytes(b"not a pdf")
+
+            with self.assertRaises(ValueError):
+                parse_textbook(textbook_path)
+
     def test_parse_rejects_unsupported_file_type(self) -> None:
         from backend.services.textbook_parser import parse_textbook
 

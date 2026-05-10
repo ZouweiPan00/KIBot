@@ -29,7 +29,7 @@ class TextbooksApiTest(unittest.TestCase):
                 self.app.dependency_overrides.pop(self.textbooks_dependency, None)
         self.temp_dir.cleanup()
 
-    def client(self):
+    def client(self, *, raise_server_exceptions: bool = True):
         import backend.api.session as session_api
         import backend.api.textbooks as textbooks_api
 
@@ -41,7 +41,7 @@ class TextbooksApiTest(unittest.TestCase):
         self.app = app
         self.session_dependency = session_api.get_session_store
         self.textbooks_dependency = textbooks_api.get_session_store
-        return TestClient(app)
+        return TestClient(app, raise_server_exceptions=raise_server_exceptions)
 
     def test_upload_textbook_parses_file_saves_upload_and_updates_session(self) -> None:
         client = self.client()
@@ -70,12 +70,8 @@ class TextbooksApiTest(unittest.TestCase):
         self.assertEqual(parsed["chapters"][0]["title"], "第一章 开始")
         self.assertNotIn("textbook_id", parsed["chapters"][0])
 
-        upload_path = (
-            Path(self.temp_dir.name)
-            / session.session_id
-            / "uploads"
-            / parsed["filename"]
-        )
+        upload_dir = Path(self.temp_dir.name) / session.session_id / "uploads"
+        [upload_path] = list(upload_dir.rglob(parsed["filename"]))
         self.assertTrue(upload_path.exists())
         self.assertEqual(upload_path.read_text(encoding="utf-8"), content)
 
@@ -86,6 +82,56 @@ class TextbooksApiTest(unittest.TestCase):
         self.assertEqual(len(saved.chapters), 1)
         self.assertEqual(saved.chapters[0]["textbook_id"], parsed["textbook_id"])
         self.assertEqual(saved.chapters[0]["title"], "第一章 开始")
+
+    def test_uploading_same_original_filename_keeps_distinct_upload_files(self) -> None:
+        client = self.client()
+        session = self.store.create_session()
+        first_content = "第一章 第一次\n第一份教材内容。"
+        second_content = "第一章 第二次\n第二份教材内容。"
+
+        first = client.post(
+            "/api/textbooks/upload",
+            data={"session_id": session.session_id},
+            files={
+                "file": (
+                    "collision.txt",
+                    first_content.encode("utf-8"),
+                    "text/plain",
+                )
+            },
+        )
+        second = client.post(
+            "/api/textbooks/upload",
+            data={"session_id": session.session_id},
+            files={
+                "file": (
+                    "collision.txt",
+                    second_content.encode("utf-8"),
+                    "text/plain",
+                )
+            },
+        )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        first_payload = first.json()
+        second_payload = second.json()
+        self.assertNotEqual(first_payload["textbook_id"], second_payload["textbook_id"])
+
+        saved = self.store.get_session(session.session_id)
+        self.assertEqual(len(saved.textbooks), 2)
+        self.assertEqual(
+            [textbook["textbook_id"] for textbook in saved.textbooks],
+            [first_payload["textbook_id"], second_payload["textbook_id"]],
+        )
+
+        upload_dir = Path(self.temp_dir.name) / session.session_id / "uploads"
+        stored_files = sorted(path for path in upload_dir.rglob("*.txt") if path.is_file())
+        self.assertEqual(len(stored_files), 2)
+        self.assertEqual(
+            sorted(path.read_text(encoding="utf-8") for path in stored_files),
+            sorted([first_content, second_content]),
+        )
 
     def test_upload_accepts_session_id_from_query(self) -> None:
         client = self.client()
@@ -123,6 +169,23 @@ class TextbooksApiTest(unittest.TestCase):
             files={"file": ("slides.docx", b"text", "application/octet-stream")},
         )
         self.assertEqual(unsupported.status_code, 400)
+
+    def test_upload_invalid_pdf_returns_400_and_removes_failed_upload(self) -> None:
+        client = self.client(raise_server_exceptions=False)
+        session = self.store.create_session()
+
+        response = client.post(
+            "/api/textbooks/upload",
+            data={"session_id": session.session_id},
+            files={"file": ("broken.pdf", b"not a pdf", "application/pdf")},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.store.get_session(session.session_id).textbooks, [])
+
+        upload_dir = Path(self.temp_dir.name) / session.session_id / "uploads"
+        stored_files = list(upload_dir.rglob("*")) if upload_dir.exists() else []
+        self.assertEqual([path for path in stored_files if path.is_file()], [])
 
     def test_list_select_and_delete_textbooks_update_session_state(self) -> None:
         client = self.client()

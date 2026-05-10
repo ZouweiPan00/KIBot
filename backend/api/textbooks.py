@@ -1,6 +1,7 @@
 from pathlib import Path, PurePosixPath
 import re
 from typing import Any, Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 
@@ -11,6 +12,7 @@ from backend.services.textbook_parser import get_file_type, parse_textbook
 
 
 router = APIRouter(prefix="/api/textbooks", tags=["textbooks"])
+UPLOAD_CHUNK_SIZE = 1024 * 1024
 
 
 def get_session_store() -> SessionStore:
@@ -36,14 +38,17 @@ async def upload_textbook(
             detail="Unsupported textbook file type",
         ) from exc
 
-    upload_dir = _session_upload_dir(session_store, session.session_id)
+    textbook_id = str(uuid4())
+    upload_dir = _textbook_upload_dir(session_store, session.session_id, textbook_id)
     upload_path = _safe_upload_path(upload_dir, safe_filename)
-    upload_path.write_bytes(await file.read())
+    await _stream_upload_to_disk(file, upload_path)
 
     try:
         parsed = parse_textbook(upload_path)
     except ValueError as exc:
+        _remove_failed_upload(upload_path)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    parsed = parsed.model_copy(update={"textbook_id": textbook_id})
 
     parsed_payload = parsed.model_dump(mode="json")
     session.textbooks.append(parsed_payload)
@@ -133,6 +138,21 @@ def _session_upload_dir(session_store: SessionStore, session_id: str) -> Path:
     return upload_dir.resolve()
 
 
+def _textbook_upload_dir(
+    session_store: SessionStore,
+    session_id: str,
+    textbook_id: str,
+) -> Path:
+    upload_root = _session_upload_dir(session_store, session_id)
+    upload_dir = (upload_root / textbook_id).resolve()
+    try:
+        upload_dir.relative_to(upload_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid upload path") from exc
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    return upload_dir
+
+
 def _safe_upload_path(upload_dir: Path, filename: str) -> Path:
     upload_path = (upload_dir / filename).resolve()
     try:
@@ -140,6 +160,24 @@ def _safe_upload_path(upload_dir: Path, filename: str) -> Path:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Invalid filename") from exc
     return upload_path
+
+
+async def _stream_upload_to_disk(file: UploadFile, upload_path: Path) -> None:
+    with upload_path.open("wb") as destination:
+        while chunk := await file.read(UPLOAD_CHUNK_SIZE):
+            destination.write(chunk)
+
+
+def _remove_failed_upload(upload_path: Path) -> None:
+    try:
+        upload_path.unlink()
+    except FileNotFoundError:
+        pass
+
+    try:
+        upload_path.parent.rmdir()
+    except OSError:
+        pass
 
 
 def _session_chapter_payloads(parsed: ParsedTextbook) -> list[dict[str, Any]]:
