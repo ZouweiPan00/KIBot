@@ -94,6 +94,19 @@ class SessionApiTest(unittest.TestCase):
         self.assertEqual(reset["memory_summary"], "")
         self.assertEqual(reset["token_usage"]["calls"], 0)
 
+    def test_delete_session_removes_saved_session(self) -> None:
+        client = self.client()
+        created = client.post("/api/session").json()
+
+        delete_response = client.delete(f"/api/session/{created['session_id']}")
+        get_response = client.get(f"/api/session/{created['session_id']}")
+        invalid_delete = client.delete("/api/session/not-a-uuid")
+
+        self.assertEqual(delete_response.status_code, 204)
+        self.assertEqual(delete_response.content, b"")
+        self.assertEqual(get_response.status_code, 404)
+        self.assertEqual(invalid_delete.status_code, 400)
+
 
 if __name__ == "__main__":
     unittest.main()

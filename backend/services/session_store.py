@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -45,6 +46,12 @@ class SessionStore:
         self.get_session(session_id)
         session = KIBotSession(session_id=session_id)
         return self.save_session(session)
+
+    def delete_session(self, session_id: str) -> None:
+        session_file = self._session_file(session_id)
+        if not session_file.exists():
+            raise FileNotFoundError(session_file)
+        shutil.rmtree(session_file.parent)
 
     def _session_file(self, session_id: str) -> Path:
         safe_session_id = self._validate_session_id(session_id)
