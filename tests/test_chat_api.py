@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 
@@ -25,7 +26,7 @@ class ChatApiTest(unittest.TestCase):
             self.app.dependency_overrides.pop(self.chat_dependency, None)
         self.temp_dir.cleanup()
 
-    def client(self):
+    def client(self, llm_client=None):
         import backend.api.chat as chat_api
 
         from fastapi import FastAPI
@@ -34,6 +35,7 @@ class ChatApiTest(unittest.TestCase):
         app = FastAPI()
         app.include_router(chat_api.router)
         app.dependency_overrides[chat_api.get_session_store] = lambda: self.store
+        app.dependency_overrides[chat_api.get_llm_client] = lambda: llm_client
         self.app = app
         self.chat_dependency = chat_api.get_session_store
         return TestClient(app)
@@ -81,6 +83,43 @@ class ChatApiTest(unittest.TestCase):
         saved = self.store.get_session(session.session_id)
         self.assertEqual(saved.integration_decisions[0]["action"], "keep")
         self.assertEqual([message["role"] for message in saved.messages], ["user", "assistant"])
+
+    def test_post_message_uses_llm_client_when_available_and_records_tokens(self) -> None:
+        calls = []
+
+        class FakeLLM:
+            def chat(self, messages):
+                calls.append(messages)
+                return SimpleNamespace(
+                    answer_text="AI: ATP should stay merged because the evidence overlaps.",
+                    token_usage=SimpleNamespace(
+                        calls=1,
+                        input_tokens=12,
+                        output_tokens=9,
+                        total_tokens=21,
+                    ),
+                )
+
+        client = self.client(llm_client=FakeLLM())
+        session = self.session_with_decision()
+
+        response = client.post(
+            "/api/chat/message",
+            json={"session_id": session.session_id, "message": "请解释 ATP 为什么要合并"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(
+            payload["assistant_message"],
+            "AI: ATP should stay merged because the evidence overlaps.",
+        )
+        self.assertEqual(payload["parsed_intent"]["source"], "rule")
+        self.assertIn("请解释 ATP 为什么要合并", calls[0][1]["content"])
+
+        saved = self.store.get_session(session.session_id)
+        self.assertEqual(saved.token_usage.calls, 1)
+        self.assertEqual(saved.token_usage.total_tokens, 21)
 
     def test_post_message_validates_session_and_body(self) -> None:
         client = self.client()

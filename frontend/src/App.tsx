@@ -9,6 +9,7 @@ import {
   getIntegrationStats,
   getRagStatus,
   getReport,
+  getSession,
   getSankey,
   listTextbooks,
   queryRag,
@@ -229,6 +230,7 @@ export default function App() {
     try {
       const nextGraph = await buildGraph(sessionId);
       setGraph(nextGraph);
+      setSession(await getSession(sessionId));
       await Promise.all([refreshRagStatus(sessionId), refreshOptionalPanels(sessionId, session)]);
     } catch (error) {
       setRightError(readableError(error, "图谱构建失败"));
@@ -285,6 +287,7 @@ export default function App() {
     try {
       const answer = await queryRag(sessionId, question.trim());
       setRagAnswer(answer);
+      setSession(await getSession(sessionId));
       await refreshRagStatus(sessionId);
     } catch (error) {
       setRightError(readableError(error, "RAG 查询失败"));
@@ -303,6 +306,7 @@ export default function App() {
     try {
       const answer = await sendChatMessage(sessionId, message.trim());
       setChatAnswer(answer);
+      setSession(await getSession(sessionId));
       await refreshOptionalPanels(sessionId, session);
     } catch (error) {
       setRightError(readableError(error, "教师对话失败"));

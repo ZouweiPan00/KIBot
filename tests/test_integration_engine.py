@@ -120,6 +120,46 @@ class IntegrationEngineTest(unittest.TestCase):
             {"bio-a", "bio-b"},
         )
 
+    def test_run_integration_ignores_structural_graph_nodes(self) -> None:
+        from backend.schemas.session import KIBotSession
+        from backend.services.integration_engine import run_integration
+
+        session = KIBotSession(session_id="33333333-3333-3333-3333-333333333333")
+        session.selected_textbooks = ["book-a", "book-b"]
+        session.textbooks = [
+            {"textbook_id": "book-a", "title": "A", "total_chars": 1000},
+            {"textbook_id": "book-b", "title": "B", "total_chars": 1000},
+        ]
+        session.graph_nodes = [
+            {
+                "id": "book-a:上篇",
+                "name": "上篇",
+                "textbook_id": "book-a",
+                "textbook_title": "A",
+                "definition": "front matter",
+            },
+            {
+                "id": "book-b:上篇",
+                "name": "上篇",
+                "textbook_id": "book-b",
+                "textbook_title": "B",
+                "definition": "front matter",
+            },
+            {
+                "id": "book-a:上皮组织",
+                "name": "上皮组织",
+                "textbook_id": "book-a",
+                "textbook_title": "A",
+                "definition": "覆盖体表和腔面的组织。",
+            },
+        ]
+
+        result = run_integration(session)
+
+        concept_names = {decision["concept_name"] for decision in result.decisions}
+        self.assertNotIn("上篇", concept_names)
+        self.assertIn("上皮组织", concept_names)
+
     def test_update_decision_mutates_only_action_and_teacher_note(self) -> None:
         from backend.services.integration_engine import update_decision
 

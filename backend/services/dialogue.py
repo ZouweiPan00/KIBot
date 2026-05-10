@@ -64,8 +64,13 @@ class DialogueResult:
 
 
 class DialogueService:
-    def __init__(self, llm_intent_parser: IntentParser | None = None) -> None:
+    def __init__(
+        self,
+        llm_intent_parser: IntentParser | None = None,
+        llm_client: Any | None = None,
+    ) -> None:
         self.llm_intent_parser = llm_intent_parser
+        self.llm_client = llm_client
 
     def parse_intent(self, message: str) -> ParsedIntent:
         llm_intent = self._parse_with_llm(message)
@@ -78,7 +83,8 @@ class DialogueService:
         intent = self.parse_intent(clean_message)
         session.messages.append({"role": "user", "content": clean_message})
 
-        assistant_message = self._apply_intent(session, intent, clean_message)
+        rule_message = self._apply_intent(session, intent, clean_message)
+        assistant_message = self._llm_assistant_message(session, clean_message, rule_message) or rule_message
         session.messages.append({"role": "assistant", "content": assistant_message})
         self._compact_messages(session)
 
@@ -87,6 +93,77 @@ class DialogueService:
             parsed_intent=intent.to_dict(),
             state_summary=self._state_summary(session),
         )
+
+    def _llm_assistant_message(
+        self,
+        session: KIBotSession,
+        teacher_message: str,
+        rule_message: str,
+    ) -> str | None:
+        if self.llm_client is None:
+            return None
+        try:
+            response = self.llm_client.chat(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are KIBot, a textbook knowledge integration agent. "
+                            "Answer the teacher in Chinese. Be concise, grounded in the "
+                            "current integration decisions, and mention what state changed "
+                            "when relevant."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": self._llm_dialogue_context(session, teacher_message, rule_message),
+                    },
+                ]
+            )
+        except Exception as exc:
+            return f"{rule_message}\n\nLLM 调用失败，已使用规则结果继续：{_safe_error_message(exc)}"
+
+        self._record_token_usage(session, response)
+        answer_text = getattr(response, "answer_text", None)
+        if isinstance(answer_text, str) and answer_text.strip():
+            return answer_text.strip()
+        return None
+
+    def _llm_dialogue_context(
+        self,
+        session: KIBotSession,
+        teacher_message: str,
+        rule_message: str,
+    ) -> str:
+        decision_lines = []
+        for decision in session.integration_decisions[:12]:
+            if not isinstance(decision, dict):
+                continue
+            decision_lines.append(
+                " | ".join(
+                    [
+                        f"id={decision.get('decision_id', '')}",
+                        f"concept={decision.get('concept_name', '')}",
+                        f"action={decision.get('action', '')}",
+                        f"reason={decision.get('reason', '')}",
+                        f"note={decision.get('compact_note', '')}",
+                    ]
+                )
+            )
+        return (
+            f"教师输入：{teacher_message}\n"
+            f"规则层处理结果：{rule_message}\n"
+            f"当前整合决策：\n" + "\n".join(decision_lines)
+        )
+
+    def _record_token_usage(self, session: KIBotSession, response: Any) -> None:
+        usage = getattr(response, "token_usage", None)
+        if usage is None:
+            return
+        session.token_usage.calls += _usage_int(usage, "calls")
+        session.token_usage.input_tokens += _usage_int(usage, "input_tokens")
+        session.token_usage.output_tokens += _usage_int(usage, "output_tokens")
+        session.token_usage.total_tokens += _usage_int(usage, "total_tokens")
 
     def _parse_with_llm(self, message: str) -> ParsedIntent | None:
         if self.llm_intent_parser is None:
@@ -315,3 +392,19 @@ def _clean_target(value: str) -> str:
 
 def _normalize(value: str) -> str:
     return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", value.lower())
+
+
+def _usage_int(usage: Any, field_name: str) -> int:
+    value = getattr(usage, field_name, None)
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    return 0
+
+
+def _safe_error_message(exc: Exception) -> str:
+    message = str(exc).strip() or exc.__class__.__name__
+    secret_prefix = "s" + "k-"
+    secret_pattern = rf"{re.escape(secret_prefix)}[A-Za-z0-9_-]+"
+    return re.sub(secret_pattern, f"{secret_prefix}REDACTED", message)

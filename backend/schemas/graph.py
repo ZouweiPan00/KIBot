@@ -31,6 +31,7 @@ class KnowledgeGraph(BaseModel):
 
 class GraphBuildRequest(BaseModel):
     session_id: str
+    use_ai: bool = True
 
 
 class GraphResponse(KnowledgeGraph):

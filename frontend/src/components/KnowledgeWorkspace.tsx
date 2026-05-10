@@ -4,6 +4,16 @@ import { GitBranch, Loader2, Network, RefreshCw, Sparkles } from "lucide-react";
 import type { GraphResponse, IntegrationStats, SankeyPayload, Textbook } from "../types";
 import { displayTextbookTitle } from "./TextbookPanel";
 
+type ChartParams = {
+  name?: string;
+  data?: {
+    displayName?: string;
+    source?: string;
+    target?: string;
+    relationType?: string;
+  };
+};
+
 interface Props {
   graph: GraphResponse;
   sankey: SankeyPayload | null;
@@ -32,7 +42,13 @@ export function KnowledgeWorkspace({
   onRunIntegration,
 }: Props) {
   const graphOption = toGraphOption(graph);
-  const sankeyOption = toSankeyOption(sankey, graph, textbooks);
+  const sankeyOption = toSankeyOption(sankey, graph, textbooks, Boolean(compressionStats));
+  const flowCount = sankeyOption.series[0].links.length;
+  const flowSubtitle = flowCount
+    ? sankey?.links?.length
+      ? "跨教材整合流向"
+      : "整合摘要预览"
+    : "等待整合";
 
   return (
     <section className="centerPanel" aria-label="KIBot 知识集成仪表盘">
@@ -67,7 +83,7 @@ export function KnowledgeWorkspace({
         <Metric label="教材" value={`${textbooks.length}/7`} detail="当前会话" />
         <Metric label="知识节点" value={String(graph.nodes.length)} detail="图谱实体" />
         <Metric label="关系" value={String(graph.edges.length)} detail="跨章节连接" />
-        <Metric label="流向" value={String(sankeyOption.series[0].links.length)} detail="整合链路" />
+        <Metric label="流向" value={String(flowCount)} detail="整合链路" />
         <Metric
           label="压缩"
           value={compressionStats ? `${Math.round(compressionStats.ratio * 100)}%` : "待整合"}
@@ -95,11 +111,11 @@ export function KnowledgeWorkspace({
           <div className="workspaceHeader">
             <div>
               <h2>Sankey 整合流</h2>
-              <span>{sankeyUnavailable ? "接口待接入，显示本地摘要" : "跨教材整合流向"}</span>
+              <span>{sankeyUnavailable ? "接口待接入" : flowSubtitle}</span>
             </div>
             <GitBranch size={20} />
           </div>
-          {sankeyOption.series[0].links.length ? (
+          {flowCount ? (
             <ReactECharts className="sankeyChart" option={sankeyOption} />
           ) : (
             <EmptyVisual title="暂无整合流" detail="选择教材后点击整合到30%" />
@@ -141,7 +157,10 @@ function toGraphOption(graph: GraphResponse) {
   );
 
   return {
-    tooltip: { trigger: "item" },
+    tooltip: {
+      trigger: "item",
+      formatter: (params: ChartParams) => tooltipLabel(params),
+    },
     legend: {
       top: 8,
       left: 12,
@@ -160,20 +179,21 @@ function toGraphOption(graph: GraphResponse) {
           show: false,
           color: "#17212f",
           fontSize: 12,
-          formatter: (params: { name?: string }) => shortLabel(params.name || ""),
+          formatter: (params: ChartParams) => shortLabel(displayLabel(params)),
         },
         emphasis: {
           focus: "adjacency",
           label: {
             show: true,
-            formatter: (params: { name?: string }) => shortLabel(params.name || "", 14),
+            formatter: (params: ChartParams) => shortLabel(displayLabel(params), 14),
           },
         },
         force: { repulsion: 360, edgeLength: [95, 175], gravity: 0.08 },
         lineStyle: { color: "source", opacity: 0.28, width: 1.4 },
         data: graph.nodes.map((node) => ({
-          name: node.name || node.label || node.id,
+          name: node.id,
           id: node.id,
+          displayName: node.name || node.label || node.id,
           value: node.frequency || 1,
           symbolSize: Math.max(34, Math.min(78, 30 + (node.importance || 1) * 18)),
           category: Math.max(
@@ -188,15 +208,22 @@ function toGraphOption(graph: GraphResponse) {
           source: edge.source,
           target: edge.target,
           value: edge.confidence || 0.5,
+          relationType: edge.relation_type,
         })),
       },
     ],
   };
 }
 
-function toSankeyOption(sankey: SankeyPayload | null, graph: GraphResponse, textbooks: Textbook[]) {
+function toSankeyOption(
+  sankey: SankeyPayload | null,
+  graph: GraphResponse,
+  textbooks: Textbook[],
+  integrationHasRun: boolean,
+) {
   const hasServerFlow = Boolean(sankey?.links?.length);
-  const fallback = prettifySankeyLabels(hasServerFlow ? sankey! : fallbackSankey(graph, textbooks), textbooks);
+  const payload = hasServerFlow || integrationHasRun ? sankey || fallbackSankey(graph, textbooks) : { nodes: [], links: [] };
+  const fallback = prettifySankeyLabels(payload, textbooks);
 
   return {
     tooltip: { trigger: "item" },
@@ -211,7 +238,7 @@ function toSankeyOption(sankey: SankeyPayload | null, graph: GraphResponse, text
         label: {
           color: "#17212f",
           fontSize: 12,
-          formatter: (params: { name?: string }) => shortLabel(params.name || "", 12),
+          formatter: (params: ChartParams) => shortLabel(params.name || "", 12),
         },
         lineStyle: { color: "gradient", opacity: 0.34 },
         data: fallback.nodes,
@@ -219,6 +246,18 @@ function toSankeyOption(sankey: SankeyPayload | null, graph: GraphResponse, text
       },
     ],
   };
+}
+
+function displayLabel(params: ChartParams): string {
+  return params.data?.displayName || params.name || "";
+}
+
+function tooltipLabel(params: ChartParams): string {
+  if (params.data?.source && params.data?.target) {
+    const relation = params.data.relationType ? ` (${params.data.relationType})` : "";
+    return `${params.data.source} -> ${params.data.target}${relation}`;
+  }
+  return displayLabel(params);
 }
 
 function shortLabel(value: string, maxLength = 10): string {

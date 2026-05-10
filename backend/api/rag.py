@@ -61,12 +61,18 @@ def query_rag(
     llm_client: LLMClient | None = Depends(get_llm_client),
 ) -> dict[str, Any]:
     session = _load_session(request.session_id, session_store)
-    return answer_query(
-        session,
-        request.question_text,
-        llm_client=llm_client,
-        use_llm=request.use_llm,
-    )
+    try:
+        result = answer_query(
+            session,
+            request.question_text,
+            llm_client=llm_client,
+            use_llm=request.use_llm,
+        )
+        session_store.save_session(session)
+        return result
+    finally:
+        if llm_client is not None and hasattr(llm_client, "close"):
+            llm_client.close()
 
 
 def _load_session(session_id: str | None, session_store: SessionStore) -> KIBotSession:

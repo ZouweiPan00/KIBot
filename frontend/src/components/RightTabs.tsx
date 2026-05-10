@@ -19,6 +19,7 @@ import type {
   ReportState,
   TokenUsage,
 } from "../types";
+import { MEDICAL_TEXTBOOKS } from "./TextbookPanel";
 
 type TabId = "decisions" | "rag" | "teacher" | "report" | "token" | "cluster";
 
@@ -62,7 +63,7 @@ export function RightTabs({
   onAskRag,
   onTeacherMessage,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<TabId>("decisions");
+  const [activeTab, setActiveTab] = useState<TabId>("teacher");
   const [question, setQuestion] = useState("炎症反应的核心机制是什么？");
 
   return (
@@ -202,11 +203,12 @@ function RagPanel({
       {answer ? (
         <article className="answerBox">
           <strong>{answer.answer_source === "llm" ? "LLM 答复" : "检索答复"}</strong>
+          {answer.llm_error ? <div className="inlineError">LLM 调用失败：{answer.llm_error}</div> : null}
           <p>{answer.answer}</p>
           <div className="citationList">
             {answer.citations.map((citation, index) => (
               <span key={`${citation.chunk_id || index}`}>
-                [{index + 1}] {citation.textbook_title || "教材"} {citation.chapter || ""}
+                [{index + 1}] {cleanTextbookTitle(citation.textbook_title || "教材")} {citation.chapter || ""}
               </span>
             ))}
           </div>
@@ -363,9 +365,21 @@ function sourceText(decision: IntegrationDecision): string {
   }
   if (decision.sources?.length) {
     return decision.sources
-      .map((source) => source.textbook_title || source.name || source.concept_name || source.id || source.node_id)
+      .map((source) =>
+        cleanTextbookTitle(
+          source.textbook_title || source.name || source.concept_name || source.id || source.node_id || "",
+        ),
+      )
       .filter(Boolean)
       .join(" / ");
   }
   return "";
+}
+
+function cleanTextbookTitle(value: string): string {
+  const prefix = value.match(/^\s*0?([1-7])(?:[_\-\s.．、]|$)/)?.[1];
+  if (prefix) {
+    return MEDICAL_TEXTBOOKS[Number(prefix) - 1] || value;
+  }
+  return value;
 }

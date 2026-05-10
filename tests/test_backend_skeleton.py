@@ -35,7 +35,7 @@ class BackendSkeletonTest(unittest.TestCase):
 
         self.assertEqual(settings.openai_base_url, "https://example.com/v1")
         self.assertEqual(settings.openai_api_key, "")
-        self.assertEqual(settings.openai_model, "gpt-4o-mini")
+        self.assertEqual(settings.openai_model, "gpt-5.4-mini")
         self.assertEqual(settings.session_storage_dir, "data/sessions")
         self.assertEqual(settings.app_host, "0.0.0.0")
         self.assertEqual(settings.app_port, 7860)

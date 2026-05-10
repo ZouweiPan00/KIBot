@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from backend.schemas.session import KIBotSession
+from backend.core.config import settings
 from backend.services.dialogue import DialogueService
+from backend.services.llm_client import LLMClient
 from backend.services.session_store import SessionStore
 
 
@@ -33,14 +35,25 @@ def get_session_store() -> SessionStore:
     return SessionStore()
 
 
+def get_llm_client() -> LLMClient | None:
+    if not settings.openai_api_key:
+        return None
+    return LLMClient()
+
+
 @router.post("/message", response_model=ChatMessageResponse)
 def post_message(
     request: ChatMessageRequest,
     session_store: SessionStore = Depends(get_session_store),
+    llm_client: LLMClient | None = Depends(get_llm_client),
 ) -> dict[str, Any]:
     session = _load_session(request.session_id, session_store)
-    result = DialogueService().handle_message(session, request.message)
-    session_store.save_session(session)
+    try:
+        result = DialogueService(llm_client=llm_client).handle_message(session, request.message)
+        session_store.save_session(session)
+    finally:
+        if llm_client is not None and hasattr(llm_client, "close"):
+            llm_client.close()
     return {
         "assistant_message": result.assistant_message,
         "parsed_intent": result.parsed_intent,

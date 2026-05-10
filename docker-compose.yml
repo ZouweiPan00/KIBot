@@ -4,6 +4,9 @@ services:
     ports:
       - "7860:7860"
     environment:
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://example.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
       SESSION_STORAGE_DIR: /app/data/sessions
     volumes:
       - kibot-data:/app/data

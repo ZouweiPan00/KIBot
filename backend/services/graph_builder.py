@@ -57,8 +57,18 @@ _CJK_STOPWORDS = {
     "内容",
     "章节",
     "本章",
+    "上篇",
+    "中篇",
+    "下篇",
+    "绪论",
+    "总论",
+    "各论",
+    "附录",
+    "索引",
+    "参考文献",
     "学习目标",
     "复习题",
+    "思考题",
 }
 
 
@@ -103,7 +113,7 @@ def build_ai_knowledge_graph(
         response = _call_llm_client(llm_client, _graph_prompt(selected_chunks))
         payload = _parse_ai_payload(response)
         return _validated_ai_graph(payload)
-    except (TypeError, ValueError, AttributeError, KeyError):
+    except (TypeError, ValueError, AttributeError, KeyError, RuntimeError):
         return None
 
 
@@ -150,6 +160,19 @@ def _build_deterministic_graph(selected_chunks: list[dict[str, Any]]) -> Knowled
 def _call_llm_client(llm_client: Any, prompt: str) -> Any:
     if callable(llm_client):
         return llm_client(prompt)
+    if hasattr(llm_client, "chat"):
+        return llm_client.chat(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You extract concise, teaching-grade textbook knowledge graphs. "
+                        "Return valid JSON only."
+                    ),
+                },
+                {"role": "user", "content": prompt},
+            ]
+        )
     if hasattr(llm_client, "complete"):
         return llm_client.complete(prompt)
     if hasattr(llm_client, "generate"):
@@ -206,7 +229,9 @@ def _parse_ai_payload(response: Any) -> dict[str, Any]:
         return response
 
     content = response
-    if hasattr(response, "content"):
+    if hasattr(response, "answer_text"):
+        content = response.answer_text
+    elif hasattr(response, "content"):
         content = response.content
     elif isinstance(response, list) and response:
         content = response[0]

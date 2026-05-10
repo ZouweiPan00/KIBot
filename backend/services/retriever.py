@@ -78,6 +78,7 @@ def answer_query(
             llm_response = llm_client.chat(_rag_messages(question, retrieved))
             answer_text = getattr(llm_response, "answer_text", None)
             if isinstance(answer_text, str) and answer_text.strip():
+                _record_token_usage(session, llm_response)
                 return {
                     "answer": answer_text.strip(),
                     "answer_source": "llm",
@@ -222,6 +223,25 @@ def _safe_error_message(exc: Exception) -> str:
     secret_prefix = "s" + "k-"
     secret_pattern = rf"{re.escape(secret_prefix)}[A-Za-z0-9_-]+"
     return re.sub(secret_pattern, f"{secret_prefix}REDACTED", message)
+
+
+def _record_token_usage(session: KIBotSession, llm_response: Any) -> None:
+    usage = getattr(llm_response, "token_usage", None)
+    if usage is None:
+        return
+    session.token_usage.calls += _usage_int(usage, "calls")
+    session.token_usage.input_tokens += _usage_int(usage, "input_tokens")
+    session.token_usage.output_tokens += _usage_int(usage, "output_tokens")
+    session.token_usage.total_tokens += _usage_int(usage, "total_tokens")
+
+
+def _usage_int(usage: Any, field_name: str) -> int:
+    value = getattr(usage, field_name, None)
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value
+    return 0
 
 
 def _citation_for(chunk: dict[str, Any]) -> dict[str, Any]:

@@ -341,6 +341,29 @@ class GraphBuilderTest(unittest.TestCase):
         self.assertNotIn("bio-1:第二章", node_ids)
         self.assertIn("bio-1:上皮组织", node_ids)
 
+    def test_filters_structural_book_tokens_from_chinese_concepts(self) -> None:
+        from backend.services.graph_builder import build_knowledge_graph
+
+        graph = build_knowledge_graph(
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "textbook_id": "bio-1",
+                    "textbook_title": "组织学与胚胎学",
+                    "chapter": "上篇 总论",
+                    "page_start": 1,
+                    "content": "上篇 绪论 目录 上皮组织 细胞连接 上皮组织。",
+                }
+            ],
+            selected_textbook_ids=["bio-1"],
+        )
+
+        node_ids = [node.id for node in graph.nodes]
+        self.assertNotIn("bio-1:上篇", node_ids)
+        self.assertNotIn("bio-1:绪论", node_ids)
+        self.assertNotIn("bio-1:目录", node_ids)
+        self.assertIn("bio-1:上皮组织", node_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

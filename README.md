@@ -1,6 +1,6 @@
 # KIBot
 
-KIBot 是一个面向教材整合场景的 Knowledge Integration Agent。当前版本提供 FastAPI 后端与 React/Vite 前端，用于上传多本教材、解析章节、生成文本切片、构建知识图谱、基于会话内教材证据进行 RAG 问答，并为后续跨教材融合与报告生成保留结构化会话状态。
+KIBot 是一个面向教材整合场景的 Knowledge Integration Agent。当前版本提供 FastAPI 后端与 React/Vite 前端，用于上传多本教材、解析章节、生成文本切片、构建知识图谱、识别跨教材重复知识点、压缩到 30% 以内、进行教师对话复核，并生成可预览的整合报告。
 
 ## 技术栈
 
@@ -23,7 +23,7 @@ cp .env.example .env
 | --- | --- | --- |
 | `OPENAI_BASE_URL` | OpenAI-compatible API 地址 | `https://example.com/v1` |
 | `OPENAI_API_KEY` | LLM 服务密钥 | `replace_me` |
-| `OPENAI_MODEL` | Chat Completions 模型名 | `gpt-4o-mini` |
+| `OPENAI_MODEL` | Chat Completions 模型名 | `gpt-5.4-mini` |
 | `SESSION_STORAGE_DIR` | 会话 JSON 与上传文件目录 | `data/sessions` |
 | `APP_HOST` | 后端监听地址 | `0.0.0.0` |
 | `APP_PORT` | 后端端口 | `7860` |
@@ -75,11 +75,13 @@ npm run dev
 4. 构建知识图谱：`POST /api/graph/build`
 5. 查看 RAG 状态：`GET /api/rag/status?session_id=...`
 6. 提问并查看引用证据：`POST /api/rag/query`
-7. 跨教材融合与报告生成由并行任务实现中，预期接口见 `docs/接口文档.md`
+7. 运行跨教材整合压缩：`POST /api/integration/run`
+8. 教师复核对话：`POST /api/chat/message`
+9. 生成实例报告：`POST /api/report/generate`
 
 ## Docker 部署说明
 
-当前 docs 分支不修改 Docker 文件；若主分支或部署环境已有 Dockerfile/compose，可按同样环境变量注入运行。推荐容器内监听 `0.0.0.0:7860`，并把 `SESSION_STORAGE_DIR` 挂载为持久化卷，避免 session JSON 与上传教材随容器销毁。
+仓库已包含 Dockerfile 与 docker-compose 配置。镜像会构建前端静态文件并由 FastAPI 在 `0.0.0.0:7860` 同时提供 API 与网页。推荐把 `SESSION_STORAGE_DIR` 挂载为持久化卷，避免 session JSON 与上传教材随容器销毁。
 
 示例运行要点：
 
@@ -88,7 +90,13 @@ docker build -t kibot .
 docker run --env-file .env -p 7860:7860 -v "$PWD/data:/app/data" kibot
 ```
 
-前端可在开发模式使用 Vite，也可由部署流水线先执行 `npm run build` 后交给后端或静态服务托管，具体以最终 Docker 文件为准。
+也可以使用 compose：
+
+```bash
+docker compose up --build
+```
+
+上线到魔搭创空间时，暴露端口保持 `7860`，在平台密钥管理中配置 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL`。
 
 ## 项目文档
 
@@ -97,4 +105,3 @@ docker run --env-file .env -p 7860:7860 -v "$PWD/data:/app/data" kibot
 - `docs/Agent架构说明.md`
 - `docs/接口文档.md`
 - `docs/部署说明.md`
-

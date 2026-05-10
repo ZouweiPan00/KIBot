@@ -53,7 +53,7 @@ export function TextbookPanel({
     <aside className="panel leftPanel" aria-label="教材管理">
       <div className="panelHeader">
         <div>
-          <span className="sectionKicker">Medical Corpus</span>
+          <span className="sectionKicker">Textbook Corpus</span>
           <h2>教材管理</h2>
         </div>
         <button className="iconButton" type="button" onClick={onRefresh} aria-label="刷新教材列表">

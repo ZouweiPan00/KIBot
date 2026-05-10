@@ -15,6 +15,7 @@ MAX_FALLBACK_CONCEPTS_PER_CHUNK = 5
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]{2,12}")
 _NON_NAME_RE = re.compile(r"[^0-9a-z\u4e00-\u9fff]+")
+_CHAPTER_NAME_RE = re.compile(r"^第[一二三四五六七八九十百千万两0-9]+[章节篇]?$")
 _STOPWORDS = {
     "and",
     "are",
@@ -32,6 +33,21 @@ _STOPWORDS = {
     "should",
     "the",
     "with",
+}
+_STRUCTURAL_CONCEPTS = {
+    "上篇",
+    "中篇",
+    "下篇",
+    "绪论",
+    "总论",
+    "各论",
+    "目录",
+    "附录",
+    "索引",
+    "参考文献",
+    "学习目标",
+    "复习题",
+    "思考题",
 }
 
 
@@ -127,7 +143,7 @@ def _graph_candidates(nodes: list[Any], selected_ids: set[str]) -> list[_Candida
             continue
         textbook_id = _textbook_id(node)
         name = str(node.get("name") or "").strip()
-        if textbook_id not in selected_ids or not name:
+        if textbook_id not in selected_ids or not name or _is_structural_concept(name):
             continue
         text = " ".join(
             str(node.get(field) or "")
@@ -385,7 +401,9 @@ def _extract_concepts(text: str) -> Counter[str]:
         if key not in _STOPWORDS:
             counts[key] += 1
     for match in _CJK_RE.finditer(text):
-        counts[match.group(0)] += 1
+        key = match.group(0)
+        if not _is_structural_concept(key):
+            counts[key] += 1
     return counts
 
 
@@ -399,6 +417,15 @@ def _keyword_set(text: str) -> set[str]:
 
 def _normalize_name(name: str) -> str:
     return _NON_NAME_RE.sub("", name.lower())
+
+
+def _is_structural_concept(name: str) -> bool:
+    stripped = name.strip()
+    if not stripped:
+        return True
+    if stripped in _STRUCTURAL_CONCEPTS:
+        return True
+    return bool(_CHAPTER_NAME_RE.fullmatch(stripped))
 
 
 def _display_name(key: str) -> str:

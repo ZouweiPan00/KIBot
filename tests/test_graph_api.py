@@ -42,6 +42,8 @@ class GraphApiTest(unittest.TestCase):
         client = self.client()
         session = self.store.create_session()
         session.selected_textbooks.append("bio-1")
+        session.integration_decisions.append({"decision_id": "stale"})
+        session.report.markdown = "stale report"
         session.chunks.extend(
             [
                 {
@@ -82,6 +84,8 @@ class GraphApiTest(unittest.TestCase):
         saved = self.store.get_session(session.session_id)
         self.assertEqual(saved.graph_nodes, payload["nodes"])
         self.assertEqual(saved.graph_edges, payload["edges"])
+        self.assertEqual(saved.integration_decisions, [])
+        self.assertEqual(saved.report.markdown, "")
 
     def test_get_graph_returns_saved_session_graph(self) -> None:
         client = self.client()
@@ -118,6 +122,81 @@ class GraphApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["nodes"], session.graph_nodes)
         self.assertEqual(response.json()["edges"], session.graph_edges)
+
+    def test_build_graph_can_use_ai_client_and_record_token_usage(self) -> None:
+        import backend.api.graph as graph_api
+
+        class FakeUsage:
+            calls = 1
+            input_tokens = 9
+            output_tokens = 7
+            total_tokens = 16
+
+        class FakeResponse:
+            answer_text = """
+            {
+              "nodes": [
+                {
+                  "name": "上皮组织",
+                  "definition": "覆盖体表和腔面的组织。",
+                  "textbook_id": "book-1",
+                  "textbook_title": "01__",
+                  "chapter": "绪论",
+                  "page": 1,
+                  "frequency": 2,
+                  "importance": 3
+                }
+              ],
+              "edges": []
+            }
+            """
+            token_usage = FakeUsage()
+
+        class FakeGraphClient:
+            def __init__(self) -> None:
+                self.token_usage = None
+                self.closed = False
+
+            def chat(self, _messages):
+                self.token_usage = FakeUsage()
+                return FakeResponse()
+
+            def close(self) -> None:
+                self.closed = True
+
+        fake_client = FakeGraphClient()
+        original_factory = graph_api._graph_llm_client
+        graph_api._graph_llm_client = lambda use_ai: fake_client if use_ai else None
+        self.addCleanup(lambda: setattr(graph_api, "_graph_llm_client", original_factory))
+
+        client = self.client()
+        session = self.store.create_session()
+        session.selected_textbooks.append("book-1")
+        session.chunks.append(
+            {
+                "chunk_id": "chunk-1",
+                "textbook_id": "book-1",
+                "textbook_title": "01__",
+                "chapter": "绪论",
+                "page_start": 1,
+                "content": "上皮组织覆盖体表。",
+            }
+        )
+        self.store.save_session(session)
+
+        response = client.post(
+            "/api/graph/build",
+            json={"session_id": session.session_id, "use_ai": True},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["nodes"][0]["name"], "上皮组织")
+        self.assertTrue(fake_client.closed)
+
+        saved = self.store.get_session(session.session_id)
+        self.assertEqual(saved.token_usage.calls, 1)
+        self.assertEqual(saved.token_usage.total_tokens, 16)
 
     def test_graph_endpoints_validate_session_id(self) -> None:
         client = self.client()

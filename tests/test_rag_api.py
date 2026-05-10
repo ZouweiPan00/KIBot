@@ -88,7 +88,15 @@ class RagApiTest(unittest.TestCase):
         class FakeLLM:
             def chat(self, messages):
                 calls.append(messages)
-                return SimpleNamespace(answer_text="ATP transfers energy. [1]")
+                return SimpleNamespace(
+                    answer_text="ATP transfers energy. [1]",
+                    token_usage=SimpleNamespace(
+                        calls=1,
+                        input_tokens=11,
+                        output_tokens=5,
+                        total_tokens=16,
+                    ),
+                )
 
         client = self.client(llm_client=FakeLLM())
         session = self.session_with_chunks()
@@ -105,6 +113,10 @@ class RagApiTest(unittest.TestCase):
         self.assertEqual(payload["retrieved_chunks"][0]["chunk"]["chunk_id"], "chunk-atp")
         self.assertGreater(payload["retrieved_chunks"][0]["score"], 0)
         self.assertIn("What does ATP do?", calls[0][1]["content"])
+
+        saved = self.store.get_session(session.session_id)
+        self.assertEqual(saved.token_usage.calls, 1)
+        self.assertEqual(saved.token_usage.total_tokens, 16)
 
     def test_query_does_not_call_llm_without_explicit_opt_in(self) -> None:
         calls = []

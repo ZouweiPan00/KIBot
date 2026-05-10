@@ -84,6 +84,10 @@ export async function bootstrapSession(): Promise<KIBotSession> {
   return session;
 }
 
+export async function getSession(sessionId: SessionId): Promise<KIBotSession> {
+  return request<KIBotSession>(`/api/session/${encodeURIComponent(sessionId)}`);
+}
+
 export async function listTextbooks(sessionId: SessionId): Promise<Textbook[]> {
   return request<Textbook[]>(withSession("/api/textbooks", sessionId));
 }
@@ -110,7 +114,7 @@ export async function selectTextbook(
 export async function buildGraph(sessionId: SessionId): Promise<GraphResponse> {
   return request<GraphResponse>("/api/graph/build", {
     method: "POST",
-    body: JSON.stringify({ session_id: sessionId }),
+    body: JSON.stringify({ session_id: sessionId, use_ai: true }),
   });
 }
 
@@ -125,7 +129,7 @@ export async function getRagStatus(sessionId: SessionId): Promise<RAGStatus> {
 export async function queryRag(sessionId: SessionId, question: string): Promise<RAGResponse> {
   return request<RAGResponse>("/api/rag/query", {
     method: "POST",
-    body: JSON.stringify({ session_id: sessionId, question, use_llm: false }),
+    body: JSON.stringify({ session_id: sessionId, question, use_llm: true }),
   });
 }
 
