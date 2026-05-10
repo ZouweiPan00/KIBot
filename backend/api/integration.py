@@ -33,9 +33,17 @@ def run_integration_api(
     session_store: SessionStore = Depends(get_session_store),
 ) -> dict[str, Any]:
     session = _load_session(request.session_id, session_store)
-    result = run_integration(session)
-    session.integration_decisions = result.decisions
-    session_store.save_session(session)
+    try:
+        result = run_integration(session)
+        session.integration_decisions = result.decisions
+        session_store.save_session(session)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Integration failed. Please retry with fewer selected textbooks.",
+        ) from exc
     return {
         "session_id": session.session_id,
         "decisions": result.decisions,

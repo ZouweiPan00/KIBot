@@ -59,6 +59,36 @@ class TextbookParserTest(unittest.TestCase):
             ["第一章 细胞", "第2节 结构"],
         )
 
+    def test_parse_txt_ignores_toc_entries_and_normalizes_spaced_heading_title(
+        self,
+    ) -> None:
+        from backend.services.textbook_parser import parse_textbook
+
+        content = (
+            "目录\n"
+            "第 一 章  绪 论  1\n"
+            "第 二 章  上 皮 组 织  12\n"
+            "第 三 章  结 缔 组 织  28\n"
+            "\n"
+            "第 二 章  上 皮 组 织\n"
+            "上皮组织由密集排列的上皮细胞和少量细胞外基质构成。\n"
+            "第 三 章  结 缔 组 织\n"
+            "结缔组织包括细胞和大量细胞外基质。\n"
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            textbook_path = Path(temp_dir) / "histology.txt"
+            textbook_path.write_text(content, encoding="utf-8")
+
+            parsed = parse_textbook(textbook_path)
+
+        self.assertEqual(
+            [chapter.title for chapter in parsed.chapters],
+            ["第二章 上皮组织", "第三章 结缔组织"],
+        )
+        self.assertNotIn("目录", parsed.chapters[0].content)
+        self.assertNotIn("第 一 章", parsed.chapters[0].content)
+
     def test_parse_markdown_without_heading_falls_back_to_full_text(self) -> None:
         from backend.services.textbook_parser import parse_textbook
 

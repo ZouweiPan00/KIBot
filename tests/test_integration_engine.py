@@ -1,4 +1,5 @@
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -9,6 +10,72 @@ if str(ROOT) not in sys.path:
 
 
 class IntegrationEngineTest(unittest.TestCase):
+    def test_run_integration_bounds_large_graph_runtime_payload_and_ratio(self) -> None:
+        from backend.schemas.session import KIBotSession
+        from backend.services.integration_engine import run_integration
+
+        session = KIBotSession(session_id="44444444-4444-4444-4444-444444444444")
+        textbook_ids = [f"book-{index}" for index in range(6)]
+        session.selected_textbooks = textbook_ids
+        session.textbooks = [
+            {
+                "textbook_id": textbook_id,
+                "title": f"Book {index}",
+                "total_chars": 4000,
+            }
+            for index, textbook_id in enumerate(textbook_ids)
+        ]
+        for book_index, textbook_id in enumerate(textbook_ids):
+            for concept_index in range(90):
+                shared_name = f"Shared Concept {concept_index % 25}"
+                session.graph_nodes.append(
+                    {
+                        "id": f"{textbook_id}:node:{concept_index}",
+                        "name": shared_name,
+                        "textbook_id": textbook_id,
+                        "textbook_title": f"Book {book_index}",
+                        "chapter": f"Chapter {concept_index // 10}",
+                        "definition": (
+                            f"{shared_name} appears in chapter {concept_index // 10}. "
+                            f"Local focus marker {book_index}-{concept_index}."
+                        ),
+                    }
+                )
+
+        started = time.monotonic()
+        result = run_integration(session)
+        elapsed = time.monotonic() - started
+
+        self.assertLess(elapsed, 1.0)
+        self.assertGreater(len(result.decisions), 0)
+        self.assertLessEqual(len(result.decisions), 80)
+        self.assertLessEqual(len(result.sankey["links"]), 120)
+        self.assertLessEqual(len(result.sankey["nodes"]), 200)
+        self.assertGreaterEqual(result.stats["ratio"], 0.20)
+        self.assertLessEqual(result.stats["ratio"], 0.30)
+        self.assertEqual(
+            result.stats["compressed_chars"],
+            sum(len(decision["compact_note"]) for decision in result.decisions),
+        )
+        self.assertTrue(
+            any("Teaching outline" in decision["compact_note"] for decision in result.decisions)
+        )
+        first_sources = result.decisions[0]["sources"]
+        self.assertLessEqual(len(first_sources), 8)
+        self.assertEqual(
+            len(first_sources),
+            len(
+                {
+                    (
+                        source["textbook_id"],
+                        source["chapter"],
+                        source["name"],
+                    )
+                    for source in first_sources
+                }
+            ),
+        )
+
     def test_run_integration_merges_similar_selected_graph_nodes_and_budgets_notes(self) -> None:
         from backend.schemas.session import KIBotSession
         from backend.services.integration_engine import run_integration

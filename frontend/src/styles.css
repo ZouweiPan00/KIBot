@@ -140,6 +140,12 @@ h2 {
   gap: 10px;
 }
 
+.sessionActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .iconButton,
 .toolButton,
 .wideAction,
@@ -468,6 +474,22 @@ h2 {
   color: var(--green);
 }
 
+.tabBar .teacherTabButton {
+  grid-column: 1 / -1;
+  min-height: 54px;
+  border-color: #89bdb1;
+  color: #286f60;
+  font-size: 0.98rem;
+  background: #f4fbf8;
+}
+
+.tabBar .teacherTabButton.active {
+  border-color: #286f60;
+  background: var(--green);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(47, 125, 109, 0.18);
+}
+
 .tabPanel {
   min-height: 0;
   overflow: auto;
@@ -553,6 +575,32 @@ h2 {
   border-radius: 8px;
   padding: 10px;
   background: #ffffff;
+}
+
+.teacherLead {
+  border-color: #9ac9bd;
+  background: #f8fbfa;
+}
+
+.teacherLead p {
+  font-size: 0.94rem;
+}
+
+.teacherComposer textarea {
+  min-height: 126px;
+  border-color: #9ac9bd;
+  font-size: 0.95rem;
+}
+
+.teacherComposer textarea:focus {
+  outline: 2px solid rgba(47, 125, 109, 0.18);
+  outline-offset: 2px;
+}
+
+.teacherSendButton {
+  min-height: 48px;
+  width: 100%;
+  font-size: 0.96rem;
 }
 
 .answerBox,
@@ -653,6 +701,7 @@ h2 {
 
   .summaryStrip,
   .metricGrid,
+  .sessionActions,
   .visualGrid,
   .tokenGrid {
     grid-template-columns: 1fr;

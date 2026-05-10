@@ -24,9 +24,9 @@ import { MEDICAL_TEXTBOOKS } from "./TextbookPanel";
 type TabId = "decisions" | "rag" | "teacher" | "report" | "token" | "cluster";
 
 const tabs: { id: TabId; label: string }[] = [
+  { id: "teacher", label: "教师对话" },
   { id: "decisions", label: "整合决策" },
   { id: "rag", label: "RAG 问答" },
-  { id: "teacher", label: "教师对话" },
   { id: "report", label: "整合报告" },
   { id: "token", label: "Token" },
   { id: "cluster", label: "Agent 集群 Beta" },
@@ -81,7 +81,9 @@ export function RightTabs({
       <div className="tabBar" role="tablist" aria-label="智能体功能">
         {tabs.map((tab) => (
           <button
-            className={activeTab === tab.id ? "active" : ""}
+            className={[activeTab === tab.id ? "active" : "", tab.id === "teacher" ? "teacherTabButton" : ""]
+              .filter(Boolean)
+              .join(" ")}
             key={tab.id}
             type="button"
             role="tab"
@@ -231,14 +233,19 @@ function TeacherPanel({
 
   return (
     <div className="teacherPanel">
-      <div className="messagePreview">
+      <div className="messagePreview teacherLead">
         <span>教师</span>
         <p>可输入 explain、keep、remove、merge、split 等复核意见。</p>
       </div>
-      <div className="questionBox">
-        <textarea value={message} onChange={(event) => setMessage(event.target.value)} />
+      <div className="questionBox teacherComposer">
+        <textarea
+          aria-label="教师复核意见"
+          placeholder="输入教师复核意见，例如：keep 上皮组织；或 explain 这个整合决策"
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+        />
         <button
-          className="toolButton primary"
+          className="toolButton primary teacherSendButton"
           type="button"
           disabled={busy || !message.trim()}
           onClick={() => onSend(message)}

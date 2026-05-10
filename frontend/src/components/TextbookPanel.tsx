@@ -4,7 +4,9 @@ import {
   Circle,
   FileUp,
   Loader2,
+  PlusCircle,
   RefreshCw,
+  RotateCcw,
 } from "lucide-react";
 
 import type { Textbook } from "../types";
@@ -26,10 +28,13 @@ interface Props {
   loading: boolean;
   uploading: boolean;
   selectingAll: boolean;
+  sessionBusy: boolean;
   error: string | null;
   onUpload: (file: File) => void;
   onSelect: (textbookId: string) => void;
   onSelectAll: () => void;
+  onRefreshSession: () => void;
+  onNewSession: () => void;
   onRefresh: () => void;
 }
 
@@ -40,10 +45,13 @@ export function TextbookPanel({
   loading,
   uploading,
   selectingAll,
+  sessionBusy,
   error,
   onUpload,
   onSelect,
   onSelectAll,
+  onRefreshSession,
+  onNewSession,
   onRefresh,
 }: Props) {
   const totalChars = textbooks.reduce((sum, book) => sum + (book.total_chars || 0), 0);
@@ -70,6 +78,22 @@ export function TextbookPanel({
           <CheckCircle2 size={14} />
           已连接
         </span>
+      </div>
+
+      <div className="sessionActions" aria-label="会话控制">
+        <button
+          className="toolButton"
+          type="button"
+          disabled={!sessionId || sessionBusy}
+          onClick={onRefreshSession}
+        >
+          {sessionBusy ? <Loader2 size={16} className="spin" /> : <RotateCcw size={16} />}
+          更新会话
+        </button>
+        <button className="toolButton primary" type="button" disabled={sessionBusy} onClick={onNewSession}>
+          {sessionBusy ? <Loader2 size={16} className="spin" /> : <PlusCircle size={16} />}
+          新建对话
+        </button>
       </div>
 
       <label className="uploadDrop">

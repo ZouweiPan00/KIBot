@@ -9,7 +9,14 @@ from backend.schemas.integration import IntegrationAction, IntegrationStats, San
 from backend.schemas.session import KIBotSession
 
 
+TARGET_RATIO = 0.25
 MAX_RATIO = 0.30
+MAX_CANDIDATES = 240
+MAX_CANDIDATES_PER_TEXTBOOK = 60
+MAX_DECISIONS = 80
+MAX_SOURCES_PER_DECISION = 8
+MAX_SANKEY_LINKS = 120
+MAX_SANKEY_NODES = 200
 MAX_FALLBACK_CONCEPTS_PER_CHUNK = 5
 
 _WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{2,}")
@@ -105,13 +112,19 @@ def build_sankey(decisions: list[dict[str, Any]]) -> dict[str, Any]:
     seen_links: set[tuple[str, str]] = set()
 
     for decision in decisions:
+        if len(links) >= MAX_SANKEY_LINKS:
+            break
         target = f"整合-{decision.get('concept_name') or '概念'}"
-        _add_sankey_node(nodes, seen_nodes, target)
+        if not _add_sankey_node(nodes, seen_nodes, target):
+            break
         for source in decision.get("sources", []):
+            if len(links) >= MAX_SANKEY_LINKS:
+                break
             if not isinstance(source, dict):
                 continue
             source_name = _source_sankey_name(source)
-            _add_sankey_node(nodes, seen_nodes, source_name)
+            if not _add_sankey_node(nodes, seen_nodes, source_name):
+                break
             link_key = (source_name, target)
             if link_key in seen_links:
                 continue
@@ -122,18 +135,19 @@ def build_sankey(decisions: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _candidate_concepts(session: KIBotSession) -> list[_Candidate]:
-    selected_ids = {
+    selected_order = [
         textbook_id
         for textbook_id in session.selected_textbooks
         if isinstance(textbook_id, str)
-    }
+    ]
+    selected_ids = set(selected_order)
     if not selected_ids:
         return []
 
     graph_candidates = _graph_candidates(session.graph_nodes, selected_ids)
     if graph_candidates:
-        return graph_candidates
-    return _chunk_candidates(session.chunks, selected_ids)
+        return _limit_candidates(graph_candidates, selected_order)
+    return _limit_candidates(_chunk_candidates(session.chunks, selected_ids), selected_order)
 
 
 def _graph_candidates(nodes: list[Any], selected_ids: set[str]) -> list[_Candidate]:
@@ -221,7 +235,10 @@ def _build_decisions(candidates: list[_Candidate]) -> list[dict[str, Any]]:
             )
         )
 
-    return sorted(decisions, key=lambda item: (item["action"] != "merge", item["decision_id"]))
+    return sorted(
+        decisions,
+        key=lambda item: (item["action"] != "merge", item["decision_id"]),
+    )[:MAX_DECISIONS]
 
 
 def _similarity_components(candidates: list[_Candidate]) -> list[list[_Candidate]]:
@@ -293,7 +310,8 @@ def _decision(
     reason: str,
     confidence: float,
 ) -> dict[str, Any]:
-    source_payloads = [_source_payload(source) for source in sources]
+    unique_sources = _unique_sources(sources)
+    source_payloads = [_source_payload(source) for source in unique_sources]
     decision_id = _decision_id(action, concept_name, source_payloads)
     return {
         "decision_id": decision_id,
@@ -302,7 +320,7 @@ def _decision(
         "sources": source_payloads,
         "reason": reason,
         "confidence": round(confidence, 2),
-        "compact_note": _compact_note(action, concept_name, sources),
+        "compact_note": _compact_note(action, concept_name, unique_sources),
         "teacher_note": "",
     }
 
@@ -318,10 +336,16 @@ def _compression_stats(session: KIBotSession, decisions: list[dict[str, Any]]) -
         for textbook in session.textbooks
         if _textbook_id(textbook) in selected_ids
     )
+    if original_chars:
+        _shape_notes_to_budget(
+            decisions,
+            target=int(original_chars * TARGET_RATIO),
+            ceiling=int(original_chars * MAX_RATIO),
+        )
     compressed_chars = sum(len(str(decision.get("compact_note") or "")) for decision in decisions)
-    budget = int(original_chars * MAX_RATIO)
-    if original_chars and compressed_chars > budget:
-        _apply_note_budget(decisions, budget)
+    ceiling = int(original_chars * MAX_RATIO)
+    if original_chars and compressed_chars > ceiling:
+        _apply_note_budget(decisions, ceiling)
         compressed_chars = sum(len(str(decision.get("compact_note") or "")) for decision in decisions)
     ratio = 0.0 if original_chars <= 0 else compressed_chars / original_chars
     return IntegrationStats(
@@ -329,6 +353,25 @@ def _compression_stats(session: KIBotSession, decisions: list[dict[str, Any]]) -
         compressed_chars=compressed_chars,
         ratio=round(min(ratio, MAX_RATIO), 4),
     ).model_dump(mode="json")
+
+
+def _shape_notes_to_budget(decisions: list[dict[str, Any]], *, target: int, ceiling: int) -> None:
+    if not decisions or target <= 0 or ceiling <= 0:
+        return
+
+    desired_total = min(target, ceiling)
+    base_share = max(1, desired_total // len(decisions))
+    remaining = desired_total
+    for index, decision in enumerate(decisions):
+        slots_left = len(decisions) - index
+        note_budget = max(1, remaining // slots_left)
+        expanded = _expanded_note(decision, max(base_share, note_budget))
+        decision["compact_note"] = expanded[: min(len(expanded), note_budget)]
+        remaining -= len(decision["compact_note"])
+        if remaining <= 0:
+            for leftover in decisions[index + 1 :]:
+                leftover["compact_note"] = ""
+            break
 
 
 def _apply_note_budget(decisions: list[dict[str, Any]], budget: int) -> None:
@@ -355,10 +398,80 @@ def _textbook_total_chars(textbook: Any) -> int:
 
 
 def _compact_note(action: IntegrationAction, concept_name: str, sources: list[_Candidate]) -> str:
-    titles = "、".join(source.textbook_title for source in sources)
+    titles = "、".join(dict.fromkeys(source.textbook_title for source in sources if source.textbook_title))
     if action == "merge":
         return f"{concept_name}: integrate overlapping explanations from {titles}."
     return f"{concept_name}: keep as a distinct concept from {titles}."
+
+
+def _expanded_note(decision: dict[str, Any], budget: int) -> str:
+    action = str(decision.get("action") or "keep")
+    concept_name = str(decision.get("concept_name") or "概念")
+    reason = str(decision.get("reason") or "available source metadata")
+    sources = [
+        source for source in decision.get("sources", []) if isinstance(source, dict)
+    ][:MAX_SOURCES_PER_DECISION]
+    source_map = "; ".join(_source_outline(source) for source in sources) or "no mapped source"
+    if action == "merge":
+        classroom_move = (
+            "teach these source entries as one integrated concept, then point out naming "
+            "or chapter differences shown by the source map"
+        )
+    elif action == "keep":
+        classroom_move = (
+            "keep this as a separate concept and use the source map to explain where it "
+            "appears in the selected material"
+        )
+    else:
+        classroom_move = (
+            "review this decision with the teacher before using it in the final outline"
+        )
+
+    parts = [
+        f"{concept_name}: {decision.get('compact_note') or ''}".strip(),
+        f"Teaching outline: anchor the lesson on {concept_name}.",
+        f"Source map: {source_map}.",
+        f"Decision basis: {reason}.",
+        f"Classroom use: {classroom_move}.",
+        "Evidence boundary: use only the listed titles, chapters, and concept labels until the teacher adds more detail.",
+    ]
+    note = " ".join(part for part in parts if part)
+    if len(note) >= budget:
+        return note
+
+    source_names = ", ".join(
+        str(source.get("name") or "") for source in sources if source.get("name")
+    )
+    if source_names:
+        note = (
+            f"{note} Review prompts: compare the labels {source_names}; ask students "
+            "which entries can be merged and which need separate examples."
+        )
+    if len(note) >= budget:
+        return note
+
+    teaching_prompts = [
+        "Board plan: start with the shared label, list each source beside it, and mark the teacher decision before discussion.",
+        "Student task: ask learners to cite the title and chapter behind each source entry before making broader claims.",
+        "Integration check: if two entries share a label, merge only the framing language and leave unsupported details for later review.",
+        "Separate check: if an entry is unique, keep it visible so the report does not hide material from one selected textbook.",
+        "Teacher cue: replace this scaffold with course-specific examples after reviewing the underlying chapter text.",
+    ]
+    prompt_index = 0
+    while len(note) < budget:
+        prompt = teaching_prompts[prompt_index % len(teaching_prompts)]
+        note = f"{note} Checkpoint {prompt_index + 1}: {concept_name}. {prompt}"
+        prompt_index += 1
+    return note
+
+
+def _source_outline(source: dict[str, Any]) -> str:
+    title = str(source.get("textbook_title") or source.get("textbook_id") or "source")
+    chapter = str(source.get("chapter") or "").strip()
+    name = str(source.get("name") or "concept")
+    if chapter:
+        return f"{title}/{chapter}/{name}"
+    return f"{title}/{name}"
 
 
 def _source_payload(source: _Candidate) -> dict[str, Any]:
@@ -371,17 +484,82 @@ def _source_payload(source: _Candidate) -> dict[str, Any]:
     }
 
 
+def _unique_sources(sources: list[_Candidate]) -> list[_Candidate]:
+    by_textbook: dict[str, list[_Candidate]] = defaultdict(list)
+    seen: set[tuple[str, str, str]] = set()
+    for source in sorted(
+        sources,
+        key=lambda item: (
+            item.textbook_id,
+            item.chapter,
+            _normalize_name(item.name),
+            item.candidate_id,
+        ),
+    ):
+        key = (source.textbook_id, source.chapter, _normalize_name(source.name))
+        if key in seen:
+            continue
+        seen.add(key)
+        by_textbook[source.textbook_id].append(source)
+
+    unique: list[_Candidate] = []
+    textbook_ids = sorted(by_textbook)
+    offset = 0
+    while len(unique) < MAX_SOURCES_PER_DECISION and textbook_ids:
+        added = False
+        for textbook_id in textbook_ids:
+            candidates = by_textbook[textbook_id]
+            if offset >= len(candidates):
+                continue
+            unique.append(candidates[offset])
+            added = True
+            if len(unique) >= MAX_SOURCES_PER_DECISION:
+                break
+        if not added:
+            break
+        offset += 1
+    return unique
+
+
 def _source_sankey_name(source: dict[str, Any]) -> str:
     title = str(source.get("textbook_title") or source.get("textbook_id") or "")
     name = str(source.get("name") or "")
     return f"{title}-{name}"
 
 
-def _add_sankey_node(nodes: list[dict[str, str]], seen: set[str], name: str) -> None:
+def _add_sankey_node(nodes: list[dict[str, str]], seen: set[str], name: str) -> bool:
     if name in seen:
-        return
+        return True
+    if len(nodes) >= MAX_SANKEY_NODES:
+        return False
     seen.add(name)
     nodes.append({"name": name})
+    return True
+
+
+def _limit_candidates(candidates: list[_Candidate], selected_ids: list[str]) -> list[_Candidate]:
+    if len(candidates) <= MAX_CANDIDATES:
+        return candidates
+
+    selected_order = {textbook_id: index for index, textbook_id in enumerate(selected_ids)}
+    per_textbook: Counter[str] = Counter()
+    limited: list[_Candidate] = []
+    for candidate in sorted(
+        candidates,
+        key=lambda item: (
+            selected_order.get(item.textbook_id, len(selected_order)),
+            item.chapter,
+            _normalize_name(item.name),
+            item.candidate_id,
+        ),
+    ):
+        if len(limited) >= MAX_CANDIDATES:
+            break
+        if per_textbook[candidate.textbook_id] >= MAX_CANDIDATES_PER_TEXTBOOK:
+            continue
+        per_textbook[candidate.textbook_id] += 1
+        limited.append(candidate)
+    return limited
 
 
 def _decision_id(action: IntegrationAction, concept_name: str, sources: list[dict[str, Any]]) -> str:

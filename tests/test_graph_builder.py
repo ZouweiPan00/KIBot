@@ -341,6 +341,36 @@ class GraphBuilderTest(unittest.TestCase):
         self.assertNotIn("bio-1:第二章", node_ids)
         self.assertIn("bio-1:上皮组织", node_ids)
 
+    def test_filters_structural_heading_noise_from_deterministic_chinese_concepts(
+        self,
+    ) -> None:
+        from backend.services.graph_builder import build_knowledge_graph
+
+        graph = build_knowledge_graph(
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "textbook_id": "bio-1",
+                    "textbook_title": "组织学与胚胎学",
+                    "chapter": "第二章 上皮组织",
+                    "page_start": 9,
+                    "content": (
+                        "目录 上篇 绪论 学习目标 第二章 上皮组织\n"
+                        "学习目标 上皮组织 细胞连接 上皮组织。"
+                    ),
+                }
+            ],
+            selected_textbook_ids=["bio-1"],
+        )
+
+        node_ids = [node.id for node in graph.nodes]
+        self.assertNotIn("bio-1:目录", node_ids)
+        self.assertNotIn("bio-1:上篇", node_ids)
+        self.assertNotIn("bio-1:绪论", node_ids)
+        self.assertNotIn("bio-1:学习目标", node_ids)
+        self.assertNotIn("bio-1:第二章", node_ids)
+        self.assertIn("bio-1:上皮组织", node_ids)
+
     def test_filters_structural_book_tokens_from_chinese_concepts(self) -> None:
         from backend.services.graph_builder import build_knowledge_graph
 
@@ -363,6 +393,64 @@ class GraphBuilderTest(unittest.TestCase):
         self.assertNotIn("bio-1:绪论", node_ids)
         self.assertNotIn("bio-1:目录", node_ids)
         self.assertIn("bio-1:上皮组织", node_ids)
+
+    def test_ai_graph_skips_noisy_nodes_and_keeps_valid_nodes(self) -> None:
+        from backend.services.graph_builder import build_knowledge_graph
+
+        graph = build_knowledge_graph(
+            [
+                {
+                    "chunk_id": "chunk-1",
+                    "textbook_id": "bio-1",
+                    "textbook_title": "组织学与胚胎学",
+                    "chapter": "第二章 上皮组织",
+                    "page_start": 9,
+                    "content": "上皮组织由上皮细胞构成。",
+                }
+            ],
+            selected_textbook_ids=["bio-1"],
+            llm_client=lambda _prompt: {
+                "nodes": [
+                    {
+                        "name": "第二章",
+                        "definition": "结构性章节标题。",
+                        "textbook_id": "bio-1",
+                    },
+                    {
+                        "name": "学习目标",
+                        "definition": "结构性学习栏目。",
+                        "textbook_id": "bio-1",
+                    },
+                    {
+                        "name": "上皮组织",
+                        "definition": "覆盖体表或衬于腔面的组织。",
+                        "textbook_id": "bio-1",
+                        "textbook_title": "组织学与胚胎学",
+                        "chapter": "第二章 上皮组织",
+                        "page": 9,
+                        "frequency": 4,
+                        "importance": 5.0,
+                    },
+                    {
+                        "definition": "缺少名称的坏节点。",
+                        "textbook_id": "bio-1",
+                    },
+                ],
+                "edges": [
+                    {
+                        "source": "第二章",
+                        "target": "上皮组织",
+                        "relation_type": "contains",
+                        "description": "Noisy structural edge.",
+                    }
+                ],
+            },
+            use_ai=True,
+        )
+
+        node_ids = [node.id for node in graph.nodes]
+        self.assertEqual(node_ids, ["bio-1:上皮组织"])
+        self.assertEqual(graph.edges, [])
 
 
 if __name__ == "__main__":
