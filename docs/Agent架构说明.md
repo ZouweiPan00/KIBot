@@ -145,6 +145,81 @@ few-shot 示例保持短小：
 - P1：LLM secondary dedup。对规则去重后的候选概念做二次语义合并，输出合并理由、证据和置信度。
 - P2：Multi-agent cluster。拆分 Corpus、Graph、Integration、Report、Review agents，但保留 coordinator 单点写入 session。
 
+## F 创新与自由发挥
+
+赛题 F 维度要求在本文独立说明“做了什么、为什么做、效果如何”。KIBot 的创新不是堆 Agent 数量，而是把教材整合做成可复核、可解释、低成本、可部署的 AI 工程闭环。
+
+| 创新类型 | 做了什么 | 为什么做 | 效果与证据路径 |
+| --- | --- | --- | --- |
+| 功能创新 | Session-grounded tool registry，把教材、图谱、整合决策、报告、token 用量统一暴露给 Agent | 教师复核时最怕“聊天里说了但系统状态没变”，因此 Agent 必须先读 session facts | `backend/agent/orchestrator.py` 的 `build_context()`；`backend/tools/*`；`tests/test_agent_tools.py` |
+| 功能创新 | 教师反馈结构化写回，支持 explain/keep/remove/merge/split，并同步图谱状态和报告 stale note | 赛题要求教师多轮对话能真实修改整合结果，而不是只给自然语言安慰 | `backend/services/dialogue.py` 的 `_apply_intent()`、`_update_graph_status()`、`_mark_report_stale()`；`frontend/src/components/RightTabs.tsx` 教师对话 Tab |
+| 技术创新 | Deterministic-vs-LLM 路由：状态、统计、token、压缩率等问题走 deterministic summary；解释类问题才调用 LLM | 决赛现场 LLM key、网络和 token 成本都不稳定，状态类问题不应浪费模型调用 | `backend/agent/orchestrator.py` 的 `_should_call_llm()`；`tests/test_orchestrator.py` |
+| 技术创新 | 轻量混合 RAG：BM25 + hashed vector cosine + chapter/concept boost，并返回分项分数 | 在无法下载大 embedding 模型或向量库的环境下，仍保留“关键词 + 向量 + 教学语境”的混合检索信号 | `backend/services/retriever.py`；`tests/test_retriever.py` 覆盖 BM25、vector fallback、top-5、教材隔离 |
+| 技术创新 | LLM-first graph extraction + deterministic fallback | LLM 可用时争取高质量抽取；LLM 不可用或 JSON 失败时仍能演示图谱与 RAG 主链路 | `backend/services/graph_builder.py`；`tests/test_graph_builder.py` 的 invalid AI JSON/shape fallback 用例 |
+| 工程创新 | Token observability 贯穿 LLM client、Graph/RAG/Dialogue API 和前端 Token 面板 | 让评委能看到成本控制，而不是只听“我们很省 token” | `backend/schemas/session.py` 的 `TokenUsage`；`backend/services/llm_client.py`；`backend/api/graph.py`；`backend/services/retriever.py`；`frontend/src/components/RightTabs.tsx` |
+| 工程创新 | Docker/ModelScope-ready 部署，容器内构建 React dist 并由 FastAPI 托管 | 评分要求公网可访问，魔搭创空间默认 7860，部署路径要足够短 | `Dockerfile` 暴露并启动 `7860`；`docker-compose.yml`；`docs/部署说明.md` |
+| 体验创新 | ECharts force graph + Sankey 整合流同屏，搜索、点击详情、频次/重要度映射 | Force graph 展示概念关系，Sankey 展示“教材来源 -> 整合概念”的压缩路径，两者互补 | `frontend/src/components/KnowledgeWorkspace.tsx` 的 graph、search、detail、Sankey 配置 |
+| 体验创新 | Agent 集群 Beta 面板先暴露未来角色边界 | 即使主链路是单 orchestrator，也让评委看到多 Agent cluster-ready 的演进方向 | `frontend/src/components/RightTabs.tsx` 的 `ClusterPanel()`；本文“Cluster-ready 方案” |
+
+## P2 技术报告草案/实验设计
+
+建议提交题目：`低成本混合 RAG 在多教材整合问答中的效果分析`。该主题最贴合现有代码，也最容易用实验数据支撑 P2：无需重写系统，只需把已有 `tests/test_retriever.py` 扩展成 20-50 题 benchmark。
+
+### 研究问题
+
+1. 在医学教材多本并行、术语重复率高的场景中，纯 term overlap、BM25、hashed vector、Hybrid rerank 哪一种更稳定？
+2. 在 chunk size 为 300/700/1200 时，top-5 引用命中率、平均响应时间、输入 token 成本如何变化？
+3. deterministic fallback 是否能在 LLM 不可用时保持“有引用、有证据、可演示”的最低质量线？
+
+### 实验矩阵
+
+| 实验 | Baseline | 变量 | 指标 | 当前证据 | P2 补数方式 |
+| --- | --- | --- | --- | --- | --- |
+| RAG 检索策略 | term overlap | BM25 / hashed vector / BM25+vector / Hybrid | top-1 命中、top-5 召回、引用准确率、MRR | `tests/test_retriever.py` 已覆盖 BM25 排序和 vector fallback | 准备 20-50 个教师问题，标注 expected chunk/chapter |
+| 分块粒度 | 700/80 | 300/50、700/80、1200/120 | 引用命中、平均 source chunk 长度、LLM input tokens | `backend/services/chunker.py` 默认 700/80 符合赛题 500-800/50-100 | 临时参数化 chunker，重建 session chunks 后跑同一题集 |
+| LLM 成本路由 | all-LLM | deterministic status route | LLM calls、input/output/total tokens、回答延迟 | `KIBotOrchestrator._should_call_llm()`；Token 面板 | 对 10 个状态类问题 + 10 个解释类问题做 A/B |
+| 图谱抽取稳定性 | LLM only | LLM-first + schema validation + deterministic fallback | 失败恢复率、有效节点数、噪声节点率 | `tests/test_graph_builder.py` 覆盖 AI JSON 失败回退 | 构造无效 JSON、空关系、章节噪声样例 |
+| 教师反馈闭环 | chat-only | structured writeback | 决策 action 命中率、图谱 status 更新率、报告 stale note 更新率 | `backend/services/dialogue.py`；`tests/test_dialogue.py` | 用 keep/remove/merge/split/explain 五类语句各 5 条 |
+| 压缩质量 | naive truncation | integration decision compact note budget | 压缩比、教学完整性人工评分、保留来源覆盖率 | `integration_engine._compression_stats()` 控制 `ratio <= 0.30` | 对 7 本教材输出报告后抽样人工复核 |
+
+### 建议结果表模板
+
+| 策略 | top-1 命中率 | top-5 召回率 | 引用准确率 | 平均延迟 ms | 平均 input tokens | 结论 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Term overlap | 待测 | 待测 | 待测 | 待测 | 0 | 关键词重复时可用，短 query 和同义表达不稳 |
+| BM25 | 待测 | 待测 | 待测 | 待测 | 0 | 对重复医学术语排序更稳 |
+| Hashed vector | 待测 | 待测 | 待测 | 待测 | 0 | 无外部模型时提供轻量向量信号 |
+| Hybrid | 待测 | 待测 | 待测 | 待测 | 0 | 预期最佳，兼顾术语、章节和图谱概念 |
+| Hybrid + LLM answer | 待测 | 待测 | 待测 | 待测 | 待测 | 回答更自然，但成本更高 |
+
+### 评测数据格式
+
+```json
+{
+  "question": "炎症反应的核心机制是什么？",
+  "type": "事实性",
+  "expected_textbook": "病理学",
+  "expected_chapter": "炎症",
+  "expected_terms": ["血管反应", "防御性反应", "损伤因子"],
+  "difficulty": 2
+}
+```
+
+### 报告结论写法
+
+若数据符合预期，P2 报告可以得出以下工程结论：KIBot 的 Hybrid RAG 在不依赖外部 embedding 服务的条件下，利用 BM25 保障术语召回，用 hashed vector 处理短 query 和词项组合，用 chapter/concept boost 对齐教学语境；再通过 deterministic-vs-LLM 路由把状态类问题从模型调用中剥离。该方案牺牲了一部分真实语义 embedding 能力，但换来了比赛现场可部署、可解释、可复现和成本可控的优势。
+
+## P0/P1/P2 覆盖表（Agent/RAG/Prompt/Innovation）
+
+| 视角 | P0 覆盖 | P1 覆盖 | P2/挑战加分潜力 | 证据路径 |
+| --- | --- | --- | --- | --- |
+| Agent 架构 | Single orchestrator、session store、tool registry、教师对话 | deterministic-vs-LLM 成本路由、token observability | cluster-ready: Corpus/Graph/Integration/Report/Review agents | `backend/agent/orchestrator.py`；`backend/tools/*`；本文“Cluster-ready 方案” |
+| RAG Pipeline | 700/80 chunk、top-5、引用、source chunk | BM25 + hashed vector + chapter/concept boost，返回分项分数 | RAG benchmark：策略、分块、延迟、token A/B | `backend/services/chunker.py`；`backend/services/retriever.py`；`tests/test_retriever.py` |
+| Prompt 工程 | JSON schema、few-shot、retrieved chunks only | confidence、防幻觉、schema fallback | prompt 模板对知识点准确率影响实验 | 本文“Prompt Engineering”；`backend/services/graph_builder.py`；`backend/services/retriever.py` |
+| 图谱整合 | merge/keep/remove/split 决策、压缩率 <=30% | Sankey 可视化、教师复核写回 | 相似度阈值、embedding 模型、压缩质量评测 | `backend/services/integration_engine.py`；`frontend/src/components/KnowledgeWorkspace.tsx` |
+| 工程部署 | FastAPI + React SPA、本地运行 | Docker、7860、ModelScope-ready | 性能监控、缓存、并发处理实验 | `Dockerfile`；`docker-compose.yml`；`docs/部署说明.md` |
+| F 创新 | 超出 P0 的结构化闭环说明 | 多项功能/技术/工程/体验创新 | 用 P2 报告把创新量化为实验数据 | 本文“F 创新与自由发挥”；`docs/P2技术报告草案.md` |
+
 ## 评分标准逐项对照
 
 ### D. Agent 架构设计
@@ -187,7 +262,7 @@ few-shot 示例保持短小：
 
 已有自动化证据：`tests/test_retriever.py` 覆盖 BM25 排序、向量分数参与、未选教材隔离和 RAG API fallback。赛后可扩展为 20-50 个教师问题，计算 top-1/top-5 命中率、引用准确率、响应时间和 token 消耗。
 
-## 创新点说明
+## 创新点说明（摘要版）
 
 1. Session-grounded tool registry：所有 Agent 回答先读取 session facts，再决定是否调用 LLM，避免把聊天历史当事实源。
 2. Deterministic-vs-LLM 成本路由：状态类问题走 deterministic summary，解释类问题才调用 LLM，降低 token 成本。

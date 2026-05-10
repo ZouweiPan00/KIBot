@@ -32,6 +32,7 @@ export interface Textbook {
   filename: string;
   title: string;
   file_type: "pdf" | "txt" | "md" | "markdown" | "docx";
+  file_size_bytes?: number;
   total_pages: number;
   total_chars: number;
   chapters: ParsedChapter[];
@@ -119,6 +120,7 @@ export interface RAGResponse {
   retrieval_status: string;
   llm_error?: string;
   citations: RAGCitation[];
+  source_chunks?: string[];
   retrieved_chunks: RetrievedChunk[];
 }
 

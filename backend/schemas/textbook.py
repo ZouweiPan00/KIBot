@@ -36,6 +36,7 @@ class ParsedTextbook(BaseModel):
     filename: str
     title: str
     file_type: FileType
+    file_size_bytes: int = 0
     total_pages: int = 0
     total_chars: int = 0
     chapters: list[ParsedChapter] = Field(default_factory=list)

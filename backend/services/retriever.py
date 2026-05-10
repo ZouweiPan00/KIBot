@@ -107,6 +107,7 @@ def answer_query(
 ) -> dict[str, Any]:
     retrieved = retrieve_chunks(session, question)
     citations = [result["citation"] for result in retrieved]
+    source_chunks = [_string_value(result["chunk"], "content") for result in retrieved]
     retrieval_status = (
         "ready" if _selected_textbook_ids(session.selected_textbooks) else "no_selected_textbooks"
     )
@@ -122,6 +123,7 @@ def answer_query(
                     "answer_source": "llm",
                     "retrieval_status": retrieval_status,
                     "citations": citations,
+                    "source_chunks": source_chunks,
                     "retrieved_chunks": retrieved,
                 }
         except Exception as exc:
@@ -131,6 +133,7 @@ def answer_query(
                 "retrieval_status": retrieval_status,
                 "llm_error": _safe_error_message(exc),
                 "citations": citations,
+                "source_chunks": source_chunks,
                 "retrieved_chunks": retrieved,
             }
 
@@ -139,6 +142,7 @@ def answer_query(
         "answer_source": "fallback",
         "retrieval_status": retrieval_status,
         "citations": citations,
+        "source_chunks": source_chunks,
         "retrieved_chunks": retrieved,
     }
 

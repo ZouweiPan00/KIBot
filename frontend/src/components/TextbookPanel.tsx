@@ -8,6 +8,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 import type { Textbook } from "../types";
 
@@ -30,7 +31,7 @@ interface Props {
   selectingAll: boolean;
   sessionBusy: boolean;
   error: string | null;
-  onUpload: (file: File) => void;
+  onUpload: (files: File[]) => void;
   onSelect: (textbookId: string) => void;
   onSelectAll: () => void;
   onRefreshSession: () => void;
@@ -52,9 +53,18 @@ export function TextbookPanel({
   onRefreshSession,
   onNewSession,
 }: Props) {
+  const [dragActive, setDragActive] = useState(false);
   const totalChars = textbooks.reduce((sum, book) => sum + (book.total_chars || 0), 0);
   const totalChapters = textbooks.reduce((sum, book) => sum + (book.chapters?.length || 0), 0);
   const { slotBooks, customBooks } = assignTextbookGroups(textbooks);
+  const uploadDisabled = !sessionId || uploading;
+
+  function submitFiles(fileList: FileList | null) {
+    const files = Array.from(fileList || []);
+    if (files.length) {
+      onUpload(files);
+    }
+  }
 
   return (
     <aside className="panel leftPanel" aria-label="教材管理">
@@ -92,19 +102,42 @@ export function TextbookPanel({
         </button>
       </div>
 
-      <label className="uploadDrop">
+      <label
+        className={`uploadDrop ${dragActive ? "dragActive" : ""}`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          if (!uploadDisabled) {
+            setDragActive(true);
+          }
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          if (!uploadDisabled) {
+            event.dataTransfer.dropEffect = "copy";
+          }
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+          if (!uploadDisabled) {
+            submitFiles(event.dataTransfer.files);
+          }
+        }}
+      >
         <FileUp size={20} />
-        <span>{uploading ? "上传解析中" : "上传教材"}</span>
+        <span>{uploading ? "上传解析中" : "拖拽或点击批量上传"}</span>
         <input
           type="file"
           accept=".pdf,.txt,.md,.markdown,.docx"
-          disabled={!sessionId || uploading}
+          multiple
+          disabled={uploadDisabled}
           onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
+            submitFiles(event.currentTarget.files);
             event.currentTarget.value = "";
-            if (file) {
-              onUpload(file);
-            }
           }}
         />
       </label>
@@ -206,7 +239,11 @@ function TextbookItem({ book, title, selected, onSelect, emptyAction }: Textbook
           <span>{book ? book.file_type.toUpperCase() : "待上传"}</span>
         </div>
         <div className="bookMeta">
-          {book ? `${book.chapters?.length || 0} 章 / ${compactNumber(book.total_chars)} 字` : "测试教材"}
+          {book
+            ? `${book.status || "parsed"} / ${formatBytes(book.file_size_bytes)} / ${
+                book.chapters?.length || 0
+              } 章 / ${compactNumber(book.total_chars)} 字`
+            : "测试教材"}
         </div>
       </div>
       {book ? (
@@ -295,6 +332,19 @@ function normalizeTextbookSignal(value: string): string {
 
 function compactNumber(value: number): string {
   return new Intl.NumberFormat("zh-CN", { notation: "compact" }).format(value);
+}
+
+function formatBytes(value?: number): string {
+  if (!value || value <= 0) {
+    return "大小待确认";
+  }
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function shortSession(sessionId: string): string {

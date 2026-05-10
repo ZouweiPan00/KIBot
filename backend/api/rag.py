@@ -29,6 +29,10 @@ class RAGQueryRequest(BaseModel):
         return (self.question or self.query or "").strip()
 
 
+class RAGIndexRequest(BaseModel):
+    session_id: str
+
+
 def get_session_store() -> SessionStore:
     return SessionStore()
 
@@ -51,6 +55,22 @@ def rag_status(
         "searchable_chunk_count": _searchable_chunk_count(session),
         "graph_node_count": len(session.graph_nodes),
         "retrieval_status": "ready" if session.selected_textbooks else "no_selected_textbooks",
+    }
+
+
+@router.post("/index")
+def index_rag(
+    request: RAGIndexRequest,
+    session_store: SessionStore = Depends(get_session_store),
+) -> dict[str, Any]:
+    session = _load_session(request.session_id, session_store)
+    return {
+        "session_id": session.session_id,
+        "indexed": bool(session.chunks),
+        "chunk_count": len(session.chunks),
+        "selected_textbook_count": len(session.selected_textbooks),
+        "searchable_chunk_count": _searchable_chunk_count(session),
+        "message": "Chunks are indexed during textbook upload and selection.",
     }
 
 

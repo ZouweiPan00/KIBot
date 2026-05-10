@@ -96,6 +96,21 @@ npm run dev
 
 完整的 P0/P1/P2 对照写在 `docs/需求分析.md`、`docs/系统设计.md` 和 `docs/Agent架构说明.md` 中。
 
+## P1加分项对照
+
+| P1 项 | 当前证据 | 评审演示入口 |
+| --- | --- | --- |
+| 多图谱视图 / Sankey | `frontend/src/components/KnowledgeWorkspace.tsx` 同屏渲染 ECharts force graph 与 Sankey；`backend/services/integration_engine.py` 生成 `sankey.nodes/links` | 点击“构建图谱”后看知识图谱；点击“整合到30%”后看 Sankey 整合流 |
+| 图谱搜索、筛选、悬停、点击 | 图谱搜索框按概念/章节高亮；ECharts tooltip 展示节点/边；点击节点打开详情卡；force graph 支持 roam、拖拽 | 中央“知识图谱”区域，搜索框和节点详情卡 |
+| 多维视觉映射 | 节点颜色映射类别/来源，大小映射 `importance/frequency`，形状映射概念类型；Sankey 宽度映射来源流量 | 中央图谱和 Sankey 图 |
+| 混合检索 vector + BM25 + rerank | `backend/services/retriever.py` 组合 `BM25Okapi`、hashed vector cosine、chapter boost、concept boost；响应返回 `bm25_score/vector_score/chapter_score/concept_score` | 右侧“RAG 问答”Tab，展开原文 chunk 可查看相关度 |
+| Token 消耗可视化 | `backend/schemas/session.py` 记录 `TokenUsage`；`backend/tools/stats_tool.py` 暴露 token 统计；前端“Token”Tab 展示调用/输入/输出/总量 | 右侧“Token”Tab |
+| DOCX 支持 | `backend/services/textbook_parser.py` 使用 `python-docx`；`frontend/src/components/TextbookPanel.tsx` 上传 accept 包含 `.docx`；`requirements.txt` 锁定 `python-docx` | 左侧教材上传区可上传 Word `.docx` |
+| Docker 一键部署 | `Dockerfile` 构建前端并启动 FastAPI；`docker-compose.yml` 暴露 7860；`docs/部署说明.md` 给出 compose 命令 | `docker compose up --build` |
+| 静态整合报告 | `report/整合报告.md` 已提交静态样例；`scripts/dump_sample_report.py` 可从当前系统状态导出报告 | 右侧“整合报告”Tab 或仓库 `report/整合报告.md` |
+| RAG benchmark 证据 | `tests/test_retriever.py` 覆盖 BM25、vector 分数、教材隔离、API fallback；`docs/系统设计.md` 给出 20-50 题扩展指标 | 本地运行 `python -m unittest tests.test_retriever tests.test_rag_api` |
+| 交互式整合反馈 | `backend/services/dialogue.py` 支持 explain/keep/remove/merge/split 写回决策和图谱状态 | 右侧“教师对话”Tab 发送复核意见 |
+
 ## Docker 部署说明
 
 仓库已包含 Dockerfile 与 docker-compose 配置。镜像会构建前端静态文件并由 FastAPI 在 `0.0.0.0:7860` 同时提供 API 与网页。推荐把 `SESSION_STORAGE_DIR` 挂载为持久化卷，避免 session JSON 与上传教材随容器销毁。

@@ -298,6 +298,12 @@ h2 {
   cursor: pointer;
 }
 
+.uploadDrop.dragActive {
+  border-color: var(--green);
+  background: #edf8f5;
+  box-shadow: inset 0 0 0 1px rgba(47, 125, 109, 0.24);
+}
+
 .uploadDrop input {
   position: absolute;
   inset: 0;

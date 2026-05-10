@@ -59,6 +59,7 @@ def parse_textbook(path: str | Path) -> ParsedTextbook:
         filename=textbook_path.name,
         title=_infer_textbook_title(textbook_path),
         file_type=file_type,
+        file_size_bytes=textbook_path.stat().st_size,
         total_pages=total_pages,
         total_chars=total_chars,
         chapters=chapters,

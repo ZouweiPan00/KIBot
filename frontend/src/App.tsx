@@ -184,15 +184,22 @@ export default function App() {
     };
   }, [refreshAll]);
 
-  async function handleUpload(file: File) {
+  async function handleUpload(files: File[]) {
     if (!sessionId) {
+      return;
+    }
+
+    const uploadQueue = files.filter(Boolean);
+    if (!uploadQueue.length) {
       return;
     }
 
     setUploading(true);
     setLeftError(null);
     try {
-      await uploadTextbook(sessionId, file);
+      for (const file of uploadQueue) {
+        await uploadTextbook(sessionId, file);
+      }
       await refreshTextbooks(sessionId);
       await refreshRagStatus(sessionId);
     } catch (error) {
