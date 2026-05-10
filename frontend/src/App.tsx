@@ -292,8 +292,10 @@ export default function App() {
               <span>跨教材实体、证据与诊疗关系</span>
             </div>
             <div className="segmentedControl" aria-label="图谱模式">
-              <button type="button">融合前</button>
-              <button className="active" type="button">
+              <button type="button" aria-pressed="false">
+                融合前
+              </button>
+              <button className="active" type="button" aria-pressed="true">
                 融合后
               </button>
             </div>

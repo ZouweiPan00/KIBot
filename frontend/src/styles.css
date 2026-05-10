@@ -561,6 +561,28 @@ h3 {
   }
 }
 
+@media (min-width: 1181px) and (max-width: 1440px) {
+  .appShell {
+    grid-template-columns: minmax(260px, 310px) minmax(520px, 1fr) minmax(280px, 340px);
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .leftPanel,
+  .rightPanel {
+    padding: 14px;
+  }
+
+  .topBar {
+    min-height: 124px;
+    padding: 18px;
+  }
+
+  .topBar h1 {
+    font-size: 3.2rem;
+  }
+}
+
 @media (max-width: 720px) {
   .appShell {
     padding: 10px;
