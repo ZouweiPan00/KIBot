@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   bootstrapSession,
   buildGraph,
+  createSession,
   generateReport,
   getGraph,
   getIntegrationDecisions,
@@ -59,6 +60,7 @@ export default function App() {
   const [reportUnavailable, setReportUnavailable] = useState(false);
   const [leftError, setLeftError] = useState<string | null>(null);
   const [rightError, setRightError] = useState<string | null>(null);
+  const [sessionBusy, setSessionBusy] = useState(false);
 
   const selectedIds = useMemo(() => {
     return new Set(
@@ -126,6 +128,30 @@ export default function App() {
     [refreshGraph, refreshOptionalPanels, refreshRagStatus, refreshTextbooks],
   );
 
+  function applySessionSnapshot(nextSession: KIBotSession) {
+    setSession(nextSession);
+    setTextbooks(nextSession.textbooks || []);
+    setGraph({ nodes: nextSession.graph_nodes || [], edges: nextSession.graph_edges || [] });
+    setDecisions(nextSession.integration_decisions || []);
+    setReport(nextSession.report || null);
+  }
+
+  function clearWorkspaceState() {
+    setSession(null);
+    setTextbooks([]);
+    setGraph(EMPTY_GRAPH);
+    setSankey(null);
+    setDecisions([]);
+    setRagStatus(null);
+    setRagAnswer(null);
+    setChatAnswer(null);
+    setReport(null);
+    setCompressionStats(null);
+    setSankeyUnavailable(false);
+    setDecisionsUnavailable(false);
+    setReportUnavailable(false);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -139,11 +165,7 @@ export default function App() {
         if (cancelled) {
           return;
         }
-        setSession(nextSession);
-        setTextbooks(nextSession.textbooks || []);
-        setGraph({ nodes: nextSession.graph_nodes || [], edges: nextSession.graph_edges || [] });
-        setDecisions(nextSession.integration_decisions || []);
-        setReport(nextSession.report || null);
+        applySessionSnapshot(nextSession);
         await refreshAll(nextSession.session_id, nextSession);
       } catch (error) {
         if (!cancelled) {
@@ -217,6 +239,43 @@ export default function App() {
       setLeftError(readableError(error, "选择全部教材失败"));
     } finally {
       setSelectingAll(false);
+    }
+  }
+
+  async function handleRefreshSession() {
+    if (!sessionId) {
+      return;
+    }
+
+    setSessionBusy(true);
+    setLeftError(null);
+    setRightError(null);
+    try {
+      const nextSession = await getSession(sessionId);
+      applySessionSnapshot(nextSession);
+      await refreshAll(nextSession.session_id, nextSession);
+    } catch (error) {
+      setLeftError(readableError(error, "刷新当前会话失败"));
+    } finally {
+      setSessionBusy(false);
+    }
+  }
+
+  async function handleNewSession() {
+    setSessionBusy(true);
+    setLoading(true);
+    setLeftError(null);
+    setRightError(null);
+    clearWorkspaceState();
+    try {
+      const nextSession = await createSession();
+      applySessionSnapshot(nextSession);
+      await refreshAll(nextSession.session_id, nextSession);
+    } catch (error) {
+      setLeftError(readableError(error, "创建新会话失败"));
+    } finally {
+      setSessionBusy(false);
+      setLoading(false);
     }
   }
 
@@ -324,10 +383,13 @@ export default function App() {
         loading={loading}
         uploading={uploading}
         selectingAll={selectingAll}
+        sessionBusy={sessionBusy}
         error={leftError}
         onUpload={handleUpload}
         onSelect={handleSelect}
         onSelectAll={handleSelectAll}
+        onRefreshSession={handleRefreshSession}
+        onNewSession={handleNewSession}
         onRefresh={() => {
           if (sessionId) {
             void refreshTextbooks(sessionId);
@@ -370,7 +432,11 @@ export default function App() {
 
 function readableError(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) {
-    return `${fallback}: ${error.message}`;
+    const message =
+      error.message === "Failed to fetch"
+        ? "无法连接后端服务，请确认 API 服务已启动并可访问。"
+        : error.message;
+    return `${fallback}：${message}`;
   }
   return fallback;
 }

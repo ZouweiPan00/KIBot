@@ -27,20 +27,75 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers:
-      init?.body instanceof FormData
-        ? init.headers
-        : { "Content-Type": "application/json", ...init?.headers },
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers:
+        init?.body instanceof FormData
+          ? init.headers
+          : { "Content-Type": "application/json", ...init?.headers },
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "";
+    throw new ApiError(
+      0,
+      `无法连接后端服务，请确认 API 服务已启动并可访问。${detail ? ` 原始错误：${detail}` : ""}`,
+    );
+  }
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new ApiError(response.status, detail || response.statusText);
+    throw new ApiError(response.status, formatHttpError(response.status, detail, response.statusText));
   }
 
   return (await response.json()) as T;
+}
+
+function formatHttpError(status: number, body: string, statusText: string): string {
+  const detail = extractErrorDetail(body) || statusText || "请求失败";
+  return `后端返回 ${status}：${detail}`;
+}
+
+function extractErrorDetail(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed === "string") {
+      return parsed;
+    }
+    if (parsed && typeof parsed === "object" && "detail" in parsed) {
+      return stringifyDetail((parsed as { detail: unknown }).detail);
+    }
+    if (parsed && typeof parsed === "object" && "message" in parsed) {
+      return stringifyDetail((parsed as { message: unknown }).message);
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+
+function stringifyDetail(detail: unknown): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail.map(stringifyDetail).filter(Boolean).join("；");
+  }
+  if (detail && typeof detail === "object") {
+    if ("msg" in detail && typeof (detail as { msg?: unknown }).msg === "string") {
+      return (detail as { msg: string }).msg;
+    }
+    return JSON.stringify(detail);
+  }
+  return detail == null ? "" : String(detail);
 }
 
 async function optionalRequest<T>(path: string, init?: RequestInit): Promise<OptionalData<T>> {
@@ -79,6 +134,10 @@ export async function bootstrapSession(): Promise<KIBotSession> {
     }
   }
 
+  return createSession();
+}
+
+export async function createSession(): Promise<KIBotSession> {
   const session = await request<KIBotSession>("/api/session", { method: "POST" });
   storeSessionId(session.session_id);
   return session;
