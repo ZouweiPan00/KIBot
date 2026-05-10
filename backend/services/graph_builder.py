@@ -259,14 +259,27 @@ def _validated_ai_graph(payload: dict[str, Any]) -> KnowledgeGraph:
     if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
         raise ValueError("AI graph requires nodes and edges lists")
 
-    nodes = [_ai_node(item) for item in raw_nodes]
+    nodes: list[GraphNode] = []
+    for item in raw_nodes:
+        try:
+            node = _ai_node(item)
+        except (TypeError, ValueError):
+            continue
+        if _is_noisy_concept_name(node.name):
+            continue
+        nodes.append(node)
     if not nodes:
         raise ValueError("AI graph requires at least one node")
 
     nodes = _limit_ai_nodes(nodes)
     node_ids = {node.id for node in nodes}
     name_to_id = {node.name.strip().lower(): node.id for node in nodes}
-    visible_edges = [_ai_edge(item, node_ids, name_to_id) for item in raw_edges]
+    visible_edges: list[GraphEdge] = []
+    for item in raw_edges:
+        try:
+            visible_edges.append(_ai_edge(item, node_ids, name_to_id))
+        except (TypeError, ValueError):
+            continue
     return KnowledgeGraph(nodes=sorted(nodes, key=lambda node: node.id), edges=visible_edges)
 
 
@@ -473,11 +486,22 @@ def _clean_cjk_concept(value: str) -> str:
     key = re.sub(r"^第[一二三四五六七八九十百千万两0-9]+[章节篇]", "", key)
     if len(key) < 2:
         return ""
-    if key in _CJK_STOPWORDS or _CHAPTER_TOKEN_RE.match(key):
+    if _is_noisy_concept_name(key):
         return ""
     if re.fullmatch(r"[一二三四五六七八九十百千万两0-9]+", key):
         return ""
     return key
+
+
+def _is_noisy_concept_name(value: str) -> bool:
+    key = re.sub(r"\s+", "", value.strip())
+    if not key:
+        return True
+    if key in _CJK_STOPWORDS or _CHAPTER_TOKEN_RE.match(key):
+        return True
+    if re.match(r"^第[一二三四五六七八九十百千万两0-9]+[章节篇].+", key):
+        return True
+    return False
 
 
 def _chunk_textbook_id(chunk: dict[str, Any]) -> str:
