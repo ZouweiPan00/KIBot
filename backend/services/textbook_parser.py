@@ -53,7 +53,7 @@ def _read_text_file(path: Path) -> str:
             return data.decode(encoding)
         except UnicodeDecodeError:
             continue
-    return data.decode("utf-8", errors="replace")
+    return data.decode("gb18030", errors="replace")
 
 
 def _read_pdf_pages(path: Path) -> list[str]:

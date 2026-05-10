@@ -76,6 +76,21 @@ class TextbookParserTest(unittest.TestCase):
         self.assertIn("中文内容", parsed.chapters[0].content)
         self.assertNotIn("\ufffd", parsed.chapters[0].content)
 
+    def test_parse_txt_preserves_gb18030_text_when_replacing_invalid_tail(self) -> None:
+        from backend.services.textbook_parser import parse_textbook
+
+        valid_gb18030 = "第一章 编码".encode("gb18030")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            textbook_path = Path(temp_dir) / "mixed-gb-text.txt"
+            textbook_path.write_bytes(valid_gb18030 + b"\xff")
+
+            parsed = parse_textbook(textbook_path)
+
+        self.assertEqual(parsed.total_chars, len("第一章 编码\ufffd"))
+        self.assertEqual(parsed.chapters[0].title, "第一章 编码\ufffd")
+        self.assertEqual(parsed.chapters[0].content, "第一章 编码\ufffd")
+
     def test_parse_pdf_extracts_pages_and_chapter_page_ranges(self) -> None:
         import fitz
 
