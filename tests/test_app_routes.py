@@ -19,25 +19,33 @@ class AppRoutesTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         import backend.api.graph as graph_api
+        import backend.api.integration as integration_api
         import backend.api.rag as rag_api
+        import backend.api.report as report_api
 
         from app import app
 
         app.dependency_overrides.pop(graph_api.get_session_store, None)
+        app.dependency_overrides.pop(integration_api.get_session_store, None)
         app.dependency_overrides.pop(rag_api.get_session_store, None)
         app.dependency_overrides.pop(rag_api.get_llm_client, None)
+        app.dependency_overrides.pop(report_api.get_session_store, None)
         self.temp_dir.cleanup()
 
     def client(self):
         import backend.api.graph as graph_api
+        import backend.api.integration as integration_api
         import backend.api.rag as rag_api
+        import backend.api.report as report_api
 
         from app import app
         from fastapi.testclient import TestClient
 
         app.dependency_overrides[graph_api.get_session_store] = lambda: self.store
+        app.dependency_overrides[integration_api.get_session_store] = lambda: self.store
         app.dependency_overrides[rag_api.get_session_store] = lambda: self.store
         app.dependency_overrides[rag_api.get_llm_client] = lambda: None
+        app.dependency_overrides[report_api.get_session_store] = lambda: self.store
         return TestClient(app)
 
     def test_real_app_mounts_graph_and_rag_routes(self) -> None:
@@ -80,6 +88,30 @@ class AppRoutesTest(unittest.TestCase):
         self.assertEqual(rag_query.status_code, 200)
         self.assertEqual(rag_query.json()["answer_source"], "fallback")
         self.assertEqual(len(rag_query.json()["retrieved_chunks"]), 1)
+
+        integration_run = client.post(
+            "/api/integration/run",
+            json={"session_id": session.session_id},
+        )
+        self.assertEqual(integration_run.status_code, 200)
+        self.assertIn("stats", integration_run.json())
+
+        integration_stats = client.get(
+            f"/api/integration/stats?session_id={session.session_id}"
+        )
+        self.assertEqual(integration_stats.status_code, 200)
+        self.assertIn("ratio", integration_stats.json()["stats"])
+
+        sankey = client.get(f"/api/integration/sankey?session_id={session.session_id}")
+        self.assertEqual(sankey.status_code, 200)
+        self.assertIn("nodes", sankey.json())
+
+        report = client.post(
+            "/api/report/generate",
+            json={"session_id": session.session_id},
+        )
+        self.assertEqual(report.status_code, 200)
+        self.assertIn("KIBot 教材整合报告", report.json()["markdown"])
 
 
 if __name__ == "__main__":
