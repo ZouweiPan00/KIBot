@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api.session import router as session_router
+from backend.api.textbooks import router as textbooks_router
 
 
 app = FastAPI(title="KIBot API", version="0.1.0")
@@ -15,6 +16,7 @@ app.add_middleware(
 )
 
 app.include_router(session_router)
+app.include_router(textbooks_router)
 
 
 @app.get("/api/health")
