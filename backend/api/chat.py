@@ -1,0 +1,73 @@
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field, field_validator
+
+from backend.schemas.session import KIBotSession
+from backend.core.config import settings
+from backend.services.dialogue import DialogueService
+from backend.services.llm_client import LLMClient
+from backend.services.session_store import SessionStore
+
+
+router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+
+class ChatMessageRequest(BaseModel):
+    session_id: str
+    message: str = Field(min_length=1)
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Message must not be blank")
+        return value
+
+
+class ChatMessageResponse(BaseModel):
+    assistant_message: str
+    parsed_intent: dict[str, Any]
+    state_summary: dict[str, Any]
+
+
+def get_session_store() -> SessionStore:
+    return SessionStore()
+
+
+def get_llm_client() -> LLMClient | None:
+    if not settings.openai_api_key:
+        return None
+    return LLMClient()
+
+
+@router.post("/message", response_model=ChatMessageResponse)
+def post_message(
+    request: ChatMessageRequest,
+    session_store: SessionStore = Depends(get_session_store),
+    llm_client: LLMClient | None = Depends(get_llm_client),
+) -> dict[str, Any]:
+    session = _load_session(request.session_id, session_store)
+    try:
+        result = DialogueService(llm_client=llm_client).handle_message(session, request.message)
+        session_store.save_session(session)
+    finally:
+        if llm_client is not None and hasattr(llm_client, "close"):
+            llm_client.close()
+    return {
+        "assistant_message": result.assistant_message,
+        "parsed_intent": result.parsed_intent,
+        "state_summary": result.state_summary,
+    }
+
+
+def _load_session(session_id: str | None, session_store: SessionStore) -> KIBotSession:
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
+
+    try:
+        return session_store.get_session(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid session ID") from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Session not found") from exc

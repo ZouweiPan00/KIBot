@@ -1,0 +1,675 @@
+:root {
+  color: #17212f;
+  background: #eef2f6;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --amber: #b56f1e;
+  --blue: #3867b7;
+  --green: #2f7d6d;
+  --line: #d8e0e8;
+  --panel: #fbfcfe;
+  --red: #a74855;
+  --shadow: 0 16px 34px rgba(31, 44, 60, 0.1);
+  --soft: #526273;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+textarea {
+  color: inherit;
+  font: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.appShell {
+  display: grid;
+  grid-template-columns: minmax(310px, 370px) minmax(560px, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  min-height: 100vh;
+  padding: 16px;
+  background: #eef2f6;
+}
+
+.panel,
+.centerPanel {
+  min-width: 0;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.leftPanel,
+.rightPanel {
+  padding: 16px;
+}
+
+.centerPanel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 14px;
+}
+
+.panelHeader,
+.topBar,
+.workspaceHeader,
+.bookTitleRow,
+.cardTitle,
+.agentFooter,
+.decisionMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  margin-top: 2px;
+  font-size: 3.6rem;
+  line-height: 0.96;
+  letter-spacing: 0;
+}
+
+h2 {
+  margin-top: 4px;
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.sectionKicker,
+.mutedLabel {
+  display: block;
+  color: var(--soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.topBar {
+  min-height: 118px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px 20px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.topBar p {
+  margin-top: 8px;
+  color: var(--soft);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.topActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.iconButton,
+.toolButton,
+.wideAction,
+.slotAction,
+.tabBar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.iconButton {
+  width: 40px;
+  height: 40px;
+}
+
+.toolButton {
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  color: #26384c;
+  font-weight: 800;
+}
+
+.wideAction {
+  gap: 8px;
+  min-height: 40px;
+  width: 100%;
+  color: var(--green);
+  font-weight: 850;
+}
+
+.toolButton.primary {
+  border-color: #286f60;
+  background: var(--green);
+  color: #ffffff;
+}
+
+.slotAction {
+  min-width: 54px;
+  height: 32px;
+  padding: 0 10px;
+  color: var(--green);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.iconButton:hover,
+.toolButton:hover,
+.wideAction:hover,
+.slotAction:hover,
+.tabBar button:hover {
+  border-color: #a8b5c4;
+  box-shadow: 0 10px 24px rgba(31, 44, 60, 0.12);
+  transform: translateY(-1px);
+}
+
+.sessionCard,
+.agentStatus,
+.agentCard,
+.visualWorkspace,
+.summaryStrip,
+.agentFooter,
+.uploadDrop,
+.answerBox,
+.reportBox,
+.messagePreview {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.sessionCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px;
+}
+
+.sessionCard strong,
+.agentStatus strong,
+.agentFooter strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.statusPill.ready {
+  background: #dff2ee;
+  color: #286f60;
+}
+
+.uploadDrop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  color: var(--green);
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.uploadDrop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.metricGrid,
+.summaryStrip,
+.visualGrid,
+.tokenGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.metricGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metricGrid div,
+.summaryStrip div,
+.tokenGrid div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.metricGrid span,
+.summaryStrip span,
+.summaryStrip small,
+.bookMeta,
+.emptyPanel span,
+.emptyVisual span,
+.messagePreview span,
+.reportBox small,
+.citationList span {
+  color: var(--soft);
+  font-size: 0.82rem;
+}
+
+.metricGrid strong,
+.summaryStrip strong,
+.tokenGrid strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 1.22rem;
+}
+
+.textbookList,
+.agentStack,
+.decisionStack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.textbookItem {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 68px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.textbookItem.selected {
+  border-color: #9ac9bd;
+  background: #f8fbfa;
+}
+
+.bookIcon,
+.agentBadge,
+.emptySlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.bookIcon {
+  width: 38px;
+  height: 38px;
+  background: #e4f1ed;
+  color: var(--green);
+}
+
+.bookBody {
+  min-width: 0;
+}
+
+.bookTitleRow strong,
+.bookTitleRow span,
+.slotAction,
+.tabBar button,
+.decisionMeta strong,
+.queueItem span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookTitleRow strong {
+  min-width: 0;
+}
+
+.bookTitleRow span {
+  color: var(--soft);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.emptySlot {
+  width: 32px;
+  color: var(--soft);
+}
+
+.summaryStrip {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.visualGrid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  min-height: 0;
+}
+
+.visualWorkspace {
+  display: grid;
+  grid-template-rows: auto minmax(280px, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.workspaceHeader {
+  padding: 15px 16px 8px;
+}
+
+.workspaceHeader span {
+  color: var(--soft);
+  font-size: 0.82rem;
+}
+
+.knowledgeChart,
+.sankeyChart {
+  min-height: 420px;
+  height: 100%;
+}
+
+.flowWorkspace .sankeyChart {
+  min-height: 420px;
+}
+
+.emptyVisual,
+.emptyPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 220px;
+  padding: 20px;
+  color: var(--soft);
+  text-align: center;
+}
+
+.emptyVisual strong,
+.emptyPanel strong {
+  color: #26384c;
+}
+
+.agentBadge {
+  width: 42px;
+  height: 42px;
+  background: #eaf0fb;
+  color: var(--blue);
+}
+
+.tabBar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.tabBar button {
+  min-height: 36px;
+  padding: 0 8px;
+  color: var(--soft);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.tabBar button.active {
+  border-color: #9ac9bd;
+  background: #eaf7f3;
+  color: var(--green);
+}
+
+.tabPanel {
+  min-height: 0;
+  overflow: auto;
+}
+
+.agentStatus {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+}
+
+.agentStatus.compact {
+  margin-bottom: 12px;
+}
+
+.agentStatus span {
+  display: block;
+  margin-top: 3px;
+  color: var(--soft);
+  font-size: 0.86rem;
+}
+
+.pulseDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--green);
+  box-shadow: 0 0 0 6px rgba(47, 125, 109, 0.13);
+}
+
+.pulseDot.muted {
+  background: #aab6c3;
+  box-shadow: 0 0 0 6px rgba(82, 98, 115, 0.12);
+}
+
+.agentCard {
+  padding: 14px;
+}
+
+.cardTitle {
+  justify-content: flex-start;
+  color: var(--blue);
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+
+.agentCard p,
+.answerBox p,
+.messagePreview p {
+  margin-top: 10px;
+  color: #34465c;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.decisionMeta {
+  margin-top: 12px;
+  color: var(--amber);
+  font-size: 0.82rem;
+}
+
+.ragPanel,
+.teacherPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.questionBox {
+  display: grid;
+  gap: 10px;
+}
+
+.questionBox textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.answerBox,
+.reportBox,
+.messagePreview {
+  padding: 14px;
+}
+
+.citationList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.reportBox pre {
+  overflow: auto;
+  max-height: 58vh;
+  margin: 12px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #26384c;
+  font: 0.86rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.messagePreview.assistant {
+  background: #f8fbfa;
+}
+
+.tokenGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.agentFooter {
+  padding: 13px;
+  color: var(--red);
+}
+
+.agentFooter strong {
+  color: #17212f;
+}
+
+.inlineError {
+  border: 1px solid #ecc0c6;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff5f6;
+  color: var(--red);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1240px) {
+  .appShell {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .centerPanel {
+    grid-row: 1;
+  }
+
+  .topBar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .topActions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 820px) {
+  .appShell {
+    padding: 10px;
+  }
+
+  .leftPanel,
+  .rightPanel,
+  .topBar {
+    padding: 14px;
+  }
+
+  h1 {
+    font-size: 2.8rem;
+  }
+
+  .summaryStrip,
+  .metricGrid,
+  .visualGrid,
+  .tokenGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .textbookItem {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .bookIcon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .slotAction,
+  .emptySlot {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
