@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,13 +16,7 @@ class BackendSkeletonTest(unittest.TestCase):
             "app.py should define the FastAPI application",
         )
 
-        try:
-            from fastapi.testclient import TestClient
-        except ModuleNotFoundError as exc:
-            if exc.name == "fastapi":
-                self.skipTest("fastapi is not installed")
-            raise
-
+        from fastapi.testclient import TestClient
         from app import app
 
         response = TestClient(app).get("/api/health")
@@ -29,27 +24,32 @@ class BackendSkeletonTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok", "service": "KIBot"})
 
-    def test_settings_defaults_match_env_example(self) -> None:
+    def test_settings_runtime_defaults(self) -> None:
         self.assertTrue(
             (ROOT / "backend/core/config.py").exists(),
             "backend/core/config.py should define Settings",
         )
 
-        try:
-            from backend.core.config import Settings
-        except ModuleNotFoundError as exc:
-            if exc.name in {"pydantic", "pydantic_settings"}:
-                self.skipTest(f"{exc.name} is not installed")
-            raise
-
+        from backend.core.config import Settings
         settings = Settings(_env_file=None)
 
         self.assertEqual(settings.openai_base_url, "https://example.com/v1")
-        self.assertEqual(settings.openai_api_key, "replace_me")
+        self.assertEqual(settings.openai_api_key, "")
         self.assertEqual(settings.openai_model, "gpt-4o-mini")
         self.assertEqual(settings.session_storage_dir, "data/sessions")
         self.assertEqual(settings.app_host, "0.0.0.0")
         self.assertEqual(settings.app_port, 7860)
+
+    def test_settings_ignore_unrelated_env_keys(self) -> None:
+        from backend.core.config import Settings
+
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as env_file:
+            env_file.write("UNRELATED_SETTING=ignored\n")
+            env_file.flush()
+
+            settings = Settings(_env_file=env_file.name)
+
+        self.assertEqual(settings.openai_api_key, "")
 
 
 if __name__ == "__main__":
