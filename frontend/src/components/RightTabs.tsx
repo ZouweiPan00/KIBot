@@ -140,11 +140,11 @@ function DecisionPanel({
         <article className="agentCard" key={decision.decision_id || `${decision.topic}-${index}`}>
           <div className="cardTitle">
             <ClipboardList size={17} />
-            <span>{decision.topic || decision.title || decision.action || "整合决策"}</span>
+            <span>{decision.concept_name || decision.topic || decision.title || decision.action || "整合决策"}</span>
           </div>
-          <p>{decision.rationale || sourceText(decision) || "等待教师复核。"}</p>
+          <p>{decision.rationale || decision.reason || decision.compact_note || sourceText(decision) || "等待教师复核。"}</p>
           <div className="decisionMeta">
-            <strong>{decision.status || decision.state || "待确认"}</strong>
+            <strong>{decision.status || decision.state || decision.action || "待确认"}</strong>
             {typeof decision.confidence === "number" ? <span>{Math.round(decision.confidence * 100)}%</span> : null}
           </div>
         </article>
@@ -324,7 +324,10 @@ function sourceText(decision: IntegrationDecision): string {
     return decision.source;
   }
   if (decision.sources?.length) {
-    return decision.sources.join(" / ");
+    return decision.sources
+      .map((source) => source.textbook_title || source.name || source.concept_name || source.id || source.node_id)
+      .filter(Boolean)
+      .join(" / ");
   }
   return "";
 }

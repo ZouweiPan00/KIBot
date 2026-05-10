@@ -1,16 +1,20 @@
 import ReactECharts from "echarts-for-react";
 import { GitBranch, Loader2, Network, RefreshCw, Sparkles } from "lucide-react";
 
-import type { GraphResponse, SankeyPayload, Textbook } from "../types";
+import type { GraphResponse, IntegrationStats, SankeyPayload, Textbook } from "../types";
 
 interface Props {
   graph: GraphResponse;
   sankey: SankeyPayload | null;
   sankeyUnavailable: boolean;
   textbooks: Textbook[];
+  selectedCount: number;
   loading: boolean;
+  integrating: boolean;
+  compressionStats: IntegrationStats | null;
   onBuildGraph: () => void;
   onRefreshGraph: () => void;
+  onRunIntegration: () => void;
 }
 
 export function KnowledgeWorkspace({
@@ -18,9 +22,13 @@ export function KnowledgeWorkspace({
   sankey,
   sankeyUnavailable,
   textbooks,
+  selectedCount,
   loading,
+  integrating,
+  compressionStats,
   onBuildGraph,
   onRefreshGraph,
+  onRunIntegration,
 }: Props) {
   const graphOption = toGraphOption(graph);
   const sankeyOption = toSankeyOption(sankey, graph, textbooks);
@@ -38,6 +46,15 @@ export function KnowledgeWorkspace({
             <RefreshCw size={17} />
             刷新图谱
           </button>
+          <button
+            className="toolButton"
+            type="button"
+            onClick={onRunIntegration}
+            disabled={integrating || loading || selectedCount === 0}
+          >
+            {integrating ? <Loader2 size={17} className="spin" /> : <GitBranch size={17} />}
+            整合到30%
+          </button>
           <button className="toolButton primary" type="button" onClick={onBuildGraph} disabled={loading}>
             {loading ? <Loader2 size={17} className="spin" /> : <Sparkles size={17} />}
             构建图谱
@@ -50,6 +67,11 @@ export function KnowledgeWorkspace({
         <Metric label="知识节点" value={String(graph.nodes.length)} detail="图谱实体" />
         <Metric label="关系" value={String(graph.edges.length)} detail="跨章节连接" />
         <Metric label="流向" value={String(sankeyOption.series[0].links.length)} detail="整合链路" />
+        <Metric
+          label="压缩"
+          value={compressionStats ? `${Math.round(compressionStats.ratio * 100)}%` : "待整合"}
+          detail="目标≤30%"
+        />
       </div>
 
       <div className="visualGrid">
@@ -79,7 +101,7 @@ export function KnowledgeWorkspace({
           {sankeyOption.series[0].links.length ? (
             <ReactECharts className="sankeyChart" option={sankeyOption} />
           ) : (
-            <EmptyVisual title="暂无整合流" detail="上传并选择教材后生成" />
+            <EmptyVisual title="暂无整合流" detail="选择教材后点击整合到30%" />
           )}
         </div>
       </div>

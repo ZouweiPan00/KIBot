@@ -3,13 +3,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   bootstrapSession,
   buildGraph,
+  generateReport,
   getGraph,
   getIntegrationDecisions,
+  getIntegrationStats,
   getRagStatus,
   getReport,
   getSankey,
   listTextbooks,
   queryRag,
+  runIntegration,
   selectTextbook,
   uploadTextbook,
 } from "./api";
@@ -18,6 +21,7 @@ import { RightTabs } from "./components/RightTabs";
 import { TextbookPanel } from "./components/TextbookPanel";
 import type {
   GraphResponse,
+  IntegrationStats,
   IntegrationDecision,
   KIBotSession,
   RAGResponse,
@@ -38,9 +42,12 @@ export default function App() {
   const [ragStatus, setRagStatus] = useState<RAGStatus | null>(null);
   const [ragAnswer, setRagAnswer] = useState<RAGResponse | null>(null);
   const [report, setReport] = useState<ReportState | null>(null);
+  const [compressionStats, setCompressionStats] = useState<IntegrationStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [graphLoading, setGraphLoading] = useState(false);
+  const [integrationLoading, setIntegrationLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
   const [ragLoading, setRagLoading] = useState(false);
   const [sankeyUnavailable, setSankeyUnavailable] = useState(false);
   const [decisionsUnavailable, setDecisionsUnavailable] = useState(false);
@@ -77,10 +84,11 @@ export default function App() {
 
   const refreshOptionalPanels = useCallback(
     async (activeSessionId: string, activeSession: KIBotSession | null) => {
-      const [decisionResult, sankeyResult, reportResult] = await Promise.all([
+      const [decisionResult, sankeyResult, reportResult, statsResult] = await Promise.all([
         getIntegrationDecisions(activeSessionId),
         getSankey(activeSessionId),
         getReport(activeSessionId),
+        getIntegrationStats(activeSessionId),
       ]);
 
       setDecisions(decisionResult.data || activeSession?.integration_decisions || []);
@@ -89,6 +97,7 @@ export default function App() {
       setSankeyUnavailable(sankeyResult.unavailable);
       setReport(reportResult.data || activeSession?.report || null);
       setReportUnavailable(reportResult.unavailable);
+      setCompressionStats(statsResult.data);
     },
     [],
   );
@@ -155,6 +164,7 @@ export default function App() {
 
     setUploading(true);
     setLeftError(null);
+    setSelectingAll(true);
     try {
       await uploadTextbook(sessionId, file);
       await refreshTextbooks(sessionId);
@@ -181,6 +191,30 @@ export default function App() {
     }
   }
 
+  async function handleSelectAll() {
+    if (!sessionId) {
+      return;
+    }
+
+    setLeftError(null);
+    try {
+      let nextSession = session;
+      for (const textbook of textbooks) {
+        if (!selectedIds.has(textbook.textbook_id)) {
+          nextSession = await selectTextbook(sessionId, textbook.textbook_id);
+        }
+      }
+      if (nextSession) {
+        setSession(nextSession);
+      }
+      await Promise.all([refreshRagStatus(sessionId), refreshOptionalPanels(sessionId, nextSession)]);
+    } catch (error) {
+      setLeftError(readableError(error, "选择全部教材失败"));
+    } finally {
+      setSelectingAll(false);
+    }
+  }
+
   async function handleBuildGraph() {
     if (!sessionId) {
       return;
@@ -196,6 +230,28 @@ export default function App() {
       setRightError(readableError(error, "图谱构建失败"));
     } finally {
       setGraphLoading(false);
+    }
+  }
+
+  async function handleRunIntegration() {
+    if (!sessionId) {
+      return;
+    }
+
+    setIntegrationLoading(true);
+    setRightError(null);
+    try {
+      const result = await runIntegration(sessionId);
+      setDecisions(result.decisions);
+      setSankey(result.sankey);
+      setCompressionStats(result.stats);
+      const nextReport = await generateReport(sessionId);
+      setReport(nextReport);
+      await refreshOptionalPanels(sessionId, session);
+    } catch (error) {
+      setRightError(readableError(error, "整合压缩失败"));
+    } finally {
+      setIntegrationLoading(false);
     }
   }
 
@@ -241,9 +297,11 @@ export default function App() {
         sessionId={sessionId}
         loading={loading}
         uploading={uploading}
+        selectingAll={selectingAll}
         error={leftError}
         onUpload={handleUpload}
         onSelect={handleSelect}
+        onSelectAll={handleSelectAll}
         onRefresh={() => {
           if (sessionId) {
             void refreshTextbooks(sessionId);
@@ -256,9 +314,13 @@ export default function App() {
         sankey={sankey}
         sankeyUnavailable={sankeyUnavailable}
         textbooks={textbooks}
+        selectedCount={selectedIds.size}
         loading={graphLoading}
+        integrating={integrationLoading}
+        compressionStats={compressionStats}
         onBuildGraph={handleBuildGraph}
         onRefreshGraph={handleRefreshGraph}
+        onRunIntegration={handleRunIntegration}
       />
 
       <RightTabs

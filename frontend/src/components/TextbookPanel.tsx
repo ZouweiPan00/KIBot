@@ -25,9 +25,11 @@ interface Props {
   sessionId: string | null;
   loading: boolean;
   uploading: boolean;
+  selectingAll: boolean;
   error: string | null;
   onUpload: (file: File) => void;
   onSelect: (textbookId: string) => void;
+  onSelectAll: () => void;
   onRefresh: () => void;
 }
 
@@ -37,9 +39,11 @@ export function TextbookPanel({
   sessionId,
   loading,
   uploading,
+  selectingAll,
   error,
   onUpload,
   onSelect,
+  onSelectAll,
   onRefresh,
 }: Props) {
   const totalChars = textbooks.reduce((sum, book) => sum + (book.total_chars || 0), 0);
@@ -103,6 +107,16 @@ export function TextbookPanel({
           <strong>{compactNumber(totalChars)}</strong>
         </div>
       </div>
+
+      <button
+        className="wideAction"
+        type="button"
+        disabled={selectingAll || !textbooks.length || selectedIds.size === textbooks.length}
+        onClick={onSelectAll}
+      >
+        {selectingAll ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}
+        {selectingAll ? "选择中" : "选择全部已上传教材"}
+      </button>
 
       {error ? <div className="inlineError">{error}</div> : null}
 

@@ -124,15 +124,42 @@ export interface RAGResponse {
 
 export interface IntegrationDecision {
   decision_id?: string;
+  concept_name?: string;
   topic?: string;
   title?: string;
   action?: string;
   source?: string;
-  sources?: string[];
+  sources?: IntegrationSource[];
   status?: string;
   state?: string;
   rationale?: string;
+  reason?: string;
+  compact_note?: string;
+  teacher_note?: string;
   confidence?: number;
+}
+
+export interface IntegrationSource {
+  name?: string;
+  concept_name?: string;
+  textbook_id?: string;
+  textbook_title?: string;
+  chapter?: string;
+  node_id?: string;
+  id?: string;
+}
+
+export interface IntegrationStats {
+  original_chars: number;
+  compressed_chars: number;
+  ratio: number;
+}
+
+export interface IntegrationRunResponse {
+  session_id: string;
+  decisions: IntegrationDecision[];
+  stats: IntegrationStats;
+  sankey: SankeyPayload;
 }
 
 export interface SankeyNode {

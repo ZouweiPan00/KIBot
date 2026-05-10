@@ -1,6 +1,8 @@
 import type {
   GraphResponse,
   IntegrationDecision,
+  IntegrationRunResponse,
+  IntegrationStats,
   KIBotSession,
   OptionalData,
   RAGResponse,
@@ -129,13 +131,43 @@ export async function queryRag(sessionId: SessionId, question: string): Promise<
 export async function getIntegrationDecisions(
   sessionId: SessionId,
 ): Promise<OptionalData<IntegrationDecision[]>> {
-  return optionalRequest<IntegrationDecision[]>(withSession("/api/integration/decisions", sessionId));
+  const response = await optionalRequest<{ decisions: IntegrationDecision[] }>(
+    withSession("/api/integration/decisions", sessionId),
+  );
+  return {
+    data: response.data?.decisions || null,
+    unavailable: response.unavailable,
+  };
 }
 
 export async function getSankey(sessionId: SessionId): Promise<OptionalData<SankeyPayload>> {
   return optionalRequest<SankeyPayload>(withSession("/api/integration/sankey", sessionId));
 }
 
+export async function runIntegration(sessionId: SessionId): Promise<IntegrationRunResponse> {
+  return request<IntegrationRunResponse>("/api/integration/run", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+}
+
+export async function getIntegrationStats(sessionId: SessionId): Promise<OptionalData<IntegrationStats>> {
+  const response = await optionalRequest<{ stats: IntegrationStats }>(
+    withSession("/api/integration/stats", sessionId),
+  );
+  return {
+    data: response.data?.stats || null,
+    unavailable: response.unavailable,
+  };
+}
+
 export async function getReport(sessionId: SessionId): Promise<OptionalData<ReportState>> {
   return optionalRequest<ReportState>(withSession("/api/report", sessionId));
+}
+
+export async function generateReport(sessionId: SessionId): Promise<ReportState> {
+  return request<ReportState>("/api/report/generate", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
 }
