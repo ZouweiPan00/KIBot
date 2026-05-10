@@ -133,6 +133,12 @@ function toGraphOption(graph: GraphResponse) {
   const categories = Array.from(new Set(graph.nodes.map((node) => node.category || "concept"))).map(
     (name) => ({ name }),
   );
+  const labeledNodeIds = new Set(
+    [...graph.nodes]
+      .sort((left, right) => (right.importance || 0) - (left.importance || 0))
+      .slice(0, 32)
+      .map((node) => node.id),
+  );
 
   return {
     tooltip: { trigger: "item" },
@@ -151,13 +157,20 @@ function toGraphOption(graph: GraphResponse) {
         roam: true,
         categories,
         label: {
-          show: true,
+          show: false,
           color: "#17212f",
           fontSize: 12,
-          formatter: "{b}",
+          formatter: (params: { name?: string }) => shortLabel(params.name || ""),
         },
-        force: { repulsion: 280, edgeLength: [80, 150] },
-        lineStyle: { color: "source", opacity: 0.46, width: 2 },
+        emphasis: {
+          focus: "adjacency",
+          label: {
+            show: true,
+            formatter: (params: { name?: string }) => shortLabel(params.name || "", 14),
+          },
+        },
+        force: { repulsion: 360, edgeLength: [95, 175], gravity: 0.08 },
+        lineStyle: { color: "source", opacity: 0.28, width: 1.4 },
         data: graph.nodes.map((node) => ({
           name: node.name || node.label || node.id,
           id: node.id,
@@ -167,6 +180,9 @@ function toGraphOption(graph: GraphResponse) {
             0,
             categories.findIndex((category) => category.name === (node.category || "concept")),
           ),
+          label: {
+            show: labeledNodeIds.has(node.id),
+          },
         })),
         links: graph.edges.map((edge) => ({
           source: edge.source,
@@ -179,7 +195,8 @@ function toGraphOption(graph: GraphResponse) {
 }
 
 function toSankeyOption(sankey: SankeyPayload | null, graph: GraphResponse, textbooks: Textbook[]) {
-  const fallback = prettifySankeyLabels(sankey || fallbackSankey(graph, textbooks), textbooks);
+  const hasServerFlow = Boolean(sankey?.links?.length);
+  const fallback = prettifySankeyLabels(hasServerFlow ? sankey! : fallbackSankey(graph, textbooks), textbooks);
 
   return {
     tooltip: { trigger: "item" },
@@ -191,13 +208,25 @@ function toSankeyOption(sankey: SankeyPayload | null, graph: GraphResponse, text
         nodeGap: 12,
         nodeWidth: 14,
         draggable: true,
-        label: { color: "#17212f", fontSize: 12 },
+        label: {
+          color: "#17212f",
+          fontSize: 12,
+          formatter: (params: { name?: string }) => shortLabel(params.name || "", 12),
+        },
         lineStyle: { color: "gradient", opacity: 0.34 },
         data: fallback.nodes,
         links: fallback.links,
       },
     ],
   };
+}
+
+function shortLabel(value: string, maxLength = 10): string {
+  const label = value.trim();
+  if (label.length <= maxLength) {
+    return label;
+  }
+  return `${label.slice(0, maxLength - 1)}...`;
 }
 
 function fallbackSankey(graph: GraphResponse, textbooks: Textbook[]): SankeyPayload {

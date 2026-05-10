@@ -199,6 +199,7 @@ export default function App() {
       return;
     }
 
+    setSelectingAll(true);
     setLeftError(null);
     try {
       let nextSession = session;
