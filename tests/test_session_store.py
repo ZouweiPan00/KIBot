@@ -3,7 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,6 +92,56 @@ class SessionStoreTest(unittest.TestCase):
             self.assertEqual(reset.memory_summary, "")
             self.assertEqual(reset.token_usage.calls, 0)
             self.assertEqual(loaded, reset)
+
+    def test_save_rejects_unsafe_session_id_without_writing_outside_storage(self) -> None:
+        from backend.schemas.session import KIBotSession
+        from backend.services.session_store import SessionStore
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = Path(temp_dir)
+            storage_dir = base_dir / "sessions"
+            escape_file = base_dir / "escape" / "session.json"
+            store = SessionStore(storage_dir=storage_dir)
+
+            with self.assertRaises(ValueError):
+                store.save_session(KIBotSession(session_id="../escape"))
+
+            self.assertFalse(escape_file.exists())
+
+    def test_save_rejects_absolute_session_id_without_writing_outside_storage(self) -> None:
+        from backend.schemas.session import KIBotSession
+        from backend.services.session_store import SessionStore
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = Path(temp_dir)
+            storage_dir = base_dir / "sessions"
+            escape_file = base_dir / "absolute" / "session.json"
+            store = SessionStore(storage_dir=storage_dir)
+
+            with self.assertRaises(ValueError):
+                store.save_session(KIBotSession(session_id=str(base_dir / "absolute")))
+
+            self.assertFalse(escape_file.exists())
+
+    def test_get_and_reset_reject_invalid_session_ids(self) -> None:
+        from backend.services.session_store import SessionStore
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = SessionStore(storage_dir=Path(temp_dir))
+
+            with self.assertRaises(ValueError):
+                store.get_session("../escape")
+            with self.assertRaises(ValueError):
+                store.reset_session("/tmp/escape")
+
+    def test_get_missing_valid_session_id_raises_file_not_found(self) -> None:
+        from backend.services.session_store import SessionStore
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = SessionStore(storage_dir=Path(temp_dir))
+
+            with self.assertRaises(FileNotFoundError):
+                store.get_session(str(uuid4()))
 
 
 if __name__ == "__main__":

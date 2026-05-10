@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from backend.core.paths import SESSION_STORAGE_DIR
 from backend.schemas.session import KIBotSession
@@ -9,9 +9,9 @@ from backend.schemas.session import KIBotSession
 class SessionStore:
     def __init__(self, storage_dir: str | Path | None = None) -> None:
         if storage_dir is None:
-            self.storage_dir = SESSION_STORAGE_DIR
+            self.storage_dir = SESSION_STORAGE_DIR.resolve()
         else:
-            self.storage_dir = Path(storage_dir)
+            self.storage_dir = Path(storage_dir).resolve()
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
     def create_session(self) -> KIBotSession:
@@ -47,4 +47,24 @@ class SessionStore:
         return self.save_session(session)
 
     def _session_file(self, session_id: str) -> Path:
-        return self.storage_dir / session_id / "session.json"
+        safe_session_id = self._validate_session_id(session_id)
+        session_file = self.storage_dir / safe_session_id / "session.json"
+
+        try:
+            session_file.resolve().relative_to(self.storage_dir)
+        except ValueError as exc:
+            raise ValueError("Session ID escapes storage directory") from exc
+
+        return session_file
+
+    def _validate_session_id(self, session_id: str) -> str:
+        try:
+            parsed = UUID(session_id)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise ValueError("Invalid session ID") from exc
+
+        normalized = str(parsed)
+        if session_id != normalized:
+            raise ValueError("Invalid session ID")
+
+        return normalized

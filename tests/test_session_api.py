@@ -1,8 +1,10 @@
 import sys
 import tempfile
 import unittest
+from importlib import import_module
 from pathlib import Path
-from uuid import UUID
+from unittest.mock import patch
+from uuid import UUID, uuid4
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,21 +17,31 @@ class SessionApiTest(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
 
         from backend.services.session_store import SessionStore
-        import backend.api.session as session_api
 
-        session_api.session_store = SessionStore(storage_dir=Path(self.temp_dir.name))
+        self.store = SessionStore(storage_dir=Path(self.temp_dir.name))
+        self.app = None
+        self.get_session_store = None
+
+    def tearDown(self) -> None:
+        if self.app is not None and self.get_session_store is not None:
+            self.app.dependency_overrides.pop(self.get_session_store, None)
+        self.temp_dir.cleanup()
+
+    def client(self):
+        import backend.api.session as session_api
 
         from app import app
         from fastapi.testclient import TestClient
 
-        self.session_api = session_api
-        self.client = TestClient(app)
-
-    def tearDown(self) -> None:
-        self.temp_dir.cleanup()
+        app.dependency_overrides[session_api.get_session_store] = lambda: self.store
+        self.app = app
+        self.get_session_store = session_api.get_session_store
+        return TestClient(app)
 
     def test_post_session_creates_retrievable_session(self) -> None:
-        create_response = self.client.post("/api/session")
+        client = self.client()
+
+        create_response = client.post("/api/session")
 
         self.assertEqual(create_response.status_code, 200)
         created = create_response.json()
@@ -39,25 +51,41 @@ class SessionApiTest(unittest.TestCase):
         self.assertEqual(created["token_usage"]["total_tokens"], 0)
         self.assertEqual(created["report"]["markdown"], "")
 
-        get_response = self.client.get(f"/api/session/{created['session_id']}")
+        get_response = client.get(f"/api/session/{created['session_id']}")
 
         self.assertEqual(get_response.status_code, 200)
         self.assertEqual(get_response.json(), created)
 
     def test_get_unknown_session_returns_404(self) -> None:
-        response = self.client.get("/api/session/missing-session")
+        response = self.client().get(f"/api/session/{uuid4()}")
 
         self.assertEqual(response.status_code, 404)
 
+    def test_invalid_session_id_returns_400(self) -> None:
+        response = self.client().get("/api/session/not-a-uuid")
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_importing_app_does_not_construct_default_session_store(self) -> None:
+        sys.modules.pop("app", None)
+        sys.modules.pop("backend.api.session", None)
+
+        with patch(
+            "backend.services.session_store.SessionStore.__init__",
+            side_effect=AssertionError("SessionStore constructed during import"),
+        ):
+            import_module("app")
+
     def test_reset_session_clears_existing_session_state(self) -> None:
-        created = self.client.post("/api/session").json()
-        session = self.session_api.session_store.get_session(created["session_id"])
+        client = self.client()
+        created = client.post("/api/session").json()
+        session = self.store.get_session(created["session_id"])
         session.messages.append({"role": "user", "content": "Keep this briefly"})
         session.memory_summary = "Temporary context"
         session.token_usage.calls = 2
-        self.session_api.session_store.save_session(session)
+        self.store.save_session(session)
 
-        response = self.client.post(f"/api/session/{created['session_id']}/reset")
+        response = client.post(f"/api/session/{created['session_id']}/reset")
 
         self.assertEqual(response.status_code, 200)
         reset = response.json()
