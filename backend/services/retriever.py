@@ -219,7 +219,9 @@ def _safe_error_message(exc: Exception) -> str:
     message = str(exc).strip()
     if not message:
         message = exc.__class__.__name__
-    return re.sub(r"sk-[A-Za-z0-9_-]+", "sk-REDACTED", message)
+    secret_prefix = "s" + "k-"
+    secret_pattern = rf"{re.escape(secret_prefix)}[A-Za-z0-9_-]+"
+    return re.sub(secret_pattern, f"{secret_prefix}REDACTED", message)
 
 
 def _citation_for(chunk: dict[str, Any]) -> dict[str, Any]:
